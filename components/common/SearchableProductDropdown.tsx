@@ -356,12 +356,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                                     src={convertGoogleDriveUrl(product.ImageURL)} 
                                     alt={product.ProductName} 
                                     className="w-8 h-8 object-cover rounded" 
-                                    // --- [FIX] បន្ថែម Fallback ក្នុងករណីរូបភាព Load មិនបាន ---
-                                    onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.onerror = null; // ការពារកុំអោយ Loop ពេល placeholder ក៏ fail ដែរ
-                                        target.src = 'https://placehold.co/40x40/666/eee?text=Img';
-                                    }}
+                                    // --- [FIX] បានដក onError ចេញតាមការស្នើសុំ (ត្រឡប់ទៅដូច Code ដើម) ---
                                 />
                                 <div className="truncate">
                                     <p className="font-semibold truncate">

@@ -152,16 +152,9 @@ export interface FullOrder {
 }
 
 
-export interface ParsedProduct {
-    name: string;
-    quantity: number;
-    total: number;
-    colorInfo: string;
-}
-
 // Represents a parsed order for easier frontend manipulation
 export interface ParsedOrder extends Omit<FullOrder, "Products (JSON)"> {
-    Products: ParsedProduct[];
+    Products: Product[];
 }
 
 // Represents a chat message from the backend/websocket
