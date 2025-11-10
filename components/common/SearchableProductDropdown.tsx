@@ -1,8 +1,79 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { MasterProduct } from '../../types';
-import { convertGoogleDriveUrl } from '../../utils/fileUtils';
 
+// --- Types and Utils (សម្រាប់ជាឧទាហរណ៍) ---
+// ជំនួសដោយ import ពិតប្រាកដរបស់អ្នក
+// import { MasterProduct } from '../../types';
+// import { convertGoogleDriveUrl } from '../../utils/fileUtils';
+
+// Dummy Type សម្រាប់អោយ Code ដំណើរការ
+interface MasterProduct {
+    ProductName: string;
+    Barcode?: string;
+    ImageURL?: string;
+}
+
+// Dummy Function សម្រាប់អោយ Code ដំណើរការ
+const convertGoogleDriveUrl = (url: string | undefined): string => {
+    // ដាក់ Logic របស់អ្នកនៅទីនេះ
+    return url || 'https://placehold.co/40x40/334155/94a3b8?text=Img';
+};
+
+// --- Custom Hook: useDebounce ---
+// Hook នេះជួយពន្យារពេលការ Update នៃតម្លៃណាមួយ (ក្នុងករណីនេះគឺ searchTerm)
+// រហូតដល់អ្នកប្រើប្រាស់ឈប់វាយក្នុងរយៈពេល delay (ឧ. 300ms)
+const useDebounce = (value: string, delay: number) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+
+    useEffect(() => {
+        // បង្កើត Timer
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+
+        // Clear Timer ប្រសិនបើ value ឬ delay ផ្លាស់ប្តូរ (ឬពេល unmount)
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [value, delay]);
+
+    return debouncedValue;
+};
+
+// --- Helper Component: HighlightMatch ---
+// Component នេះទទួល text និង ពាក្យដែលត្រូវ highlight
+// ហើយបំបែក text នោះដោយដាក់ <mark> លើផ្នែកដែលត្រូវគ្នា
+interface HighlightMatchProps {
+    text: string;
+    highlight: string;
+}
+
+const HighlightMatch: React.FC<HighlightMatchProps> = ({ text, highlight }) => {
+    if (!highlight.trim()) {
+        return <span>{text}</span>;
+    }
+    // បង្កើត RegExp ពីពាក្យ highlight ដោយមិនប្រកាន់អក្សរតូចធំ (i)
+    // និងស្វែងរកគ្រប់កន្លែង (g)
+    const regex = new RegExp(`(${highlight})`, 'gi');
+    const parts = text.split(regex);
+
+    return (
+        <span>
+            {parts.map((part, index) =>
+                regex.test(part) ? (
+                    // ប្រើ <mark> សម្រាប់ highlight
+                    <mark key={index} className="bg-yellow-400 text-gray-900 rounded px-0.5 py-0">
+                        {part}
+                    </mark>
+                ) : (
+                    <span key={index}>{part}</span>
+                )
+            )}
+        </span>
+    );
+};
+
+
+// --- Main Component: SearchableProductDropdown ---
 interface SearchableProductDropdownProps {
     products: MasterProduct[];
     selectedProductName: string;
@@ -15,10 +86,15 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
     const dropdownRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
 
+    // ប្រើ Debounce លើ searchTerm
+    // ការ Search នឹងធ្វើឡើងតែ 300ms បន្ទាប់ពី User ឈប់វាយ
+    const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
     const selectedProduct = useMemo(() => {
         return products.find(p => p.ProductName === selectedProductName);
     }, [products, selectedProductName]);
 
+    // Effect សម្រាប់ដោះស្រាយការ Click នៅខាងក្រៅ Dropdown
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -29,70 +105,70 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // Effect សម្រាប់ Focus លើ Input ពេលបើក និង Clear Search ពេលបិទ
     useEffect(() => {
         if (isOpen) {
-            // Focus the search input when the dropdown opens
             setTimeout(() => searchInputRef.current?.focus(), 100);
         } else {
-            setSearchTerm(''); // Reset search term when dropdown closes
+            setSearchTerm(''); // Reset search term ពេលបិទ
         }
     }, [isOpen]);
     
+    // --- Logic ការ Search និង Sort ឆ្លាតវៃ ---
     const filteredProducts = useMemo(() => {
-        if (!searchTerm) return products;
-        const searchTerms = searchTerm.toLowerCase().split(' ').filter(Boolean);
-        if (searchTerms.length === 0) return products;
-    
+        const fullSearch = debouncedSearchTerm.toLowerCase().trim();
+        if (!fullSearch) return products; // បង្ហាញទាំងអស់បើមិន Search
+
+        const searchTerms = fullSearch.split(' ').filter(Boolean);
+
         const scoredProducts = products.map(product => {
-            const lowerProductName = product.ProductName.toLowerCase();
+            const lowerName = product.ProductName.toLowerCase();
             const lowerBarcode = (product.Barcode || '').toLowerCase();
             let score = 0;
-            let matchesAll = true;
-    
+            let matchesAllTerms = true;
+
+            // 1. ពិនិត្យថាគ្រប់ពាក្យ Search ត្រូវតែមាន
             for (const term of searchTerms) {
-                const productNameContains = lowerProductName.includes(term);
-                const barcodeContains = lowerBarcode.includes(term);
+                const nameMatch = lowerName.includes(term);
+                const barcodeMatch = lowerBarcode.includes(term);
                 
-                if (!productNameContains && !barcodeContains) {
-                    matchesAll = false;
+                if (!nameMatch && !barcodeMatch) {
+                    matchesAllTerms = false;
                     break;
-                }
-    
-                if (lowerProductName.startsWith(term)) {
-                    score += 10;
-                } else if (productNameContains) {
-                    score += 1;
-                }
-                
-                if (lowerBarcode.startsWith(term)) {
-                    score += 5;
-                } else if (barcodeContains) {
-                    score += 1;
                 }
             }
             
-            // Give a larger bonus for matches against the full search term
-            const fullSearchTerm = searchTerm.toLowerCase();
-            if (lowerProductName.startsWith(fullSearchTerm)) {
-                score += 20;
-            }
-            if (lowerBarcode.startsWith(fullSearchTerm)) {
-                score += 15;
+            if (!matchesAllTerms) {
+                return { product, score: 0 };
             }
 
-            if (!matchesAll) {
-                score = 0;
+            // 2. គណនាពិន្ទុ (Scoring)
+            // ពិន្ទុខ្ពស់សម្រាប់ Full Search Term
+            if (lowerName === fullSearch) score += 1000;
+            if (lowerBarcode === fullSearch) score += 500;
+            
+            if (lowerName.startsWith(fullSearch)) score += 100;
+            if (lowerBarcode.startsWith(fullSearch)) score += 50;
+
+            // ពិន្ទុសម្រាប់ Individual Terms
+            for (const term of searchTerms) {
+                if (lowerName.startsWith(term)) score += 20;
+                else if (lowerName.includes(term)) score += 5;
+                
+                if (lowerBarcode.startsWith(term)) score += 10;
+                else if (lowerBarcode.includes(term)) score += 2;
             }
             
             return { product, score };
         });
     
+        // 3. Filter និង Sort
         return scoredProducts
             .filter(item => item.score > 0)
-            .sort((a, b) => b.score - a.score)
+            .sort((a, b) => b.score - a.score) // Sort តាមពិន្ទុ (ខ្ពស់ទៅទាប)
             .map(item => item.product);
     
-    }, [products, searchTerm]);
+    }, [products, debouncedSearchTerm]);
 
 
     const handleSelect = (productName: string) => {
@@ -107,9 +183,20 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                 className="form-select text-left w-full flex justify-between items-center"
                 onClick={() => setIsOpen(!isOpen)}
             >
-                <span className={selectedProduct ? 'text-white' : 'text-gray-400'}>
-                    {selectedProduct ? selectedProduct.ProductName : 'ជ្រើសរើសផលិតផល'}
-                </span>
+                {selectedProduct ? (
+                    <div className="flex items-center gap-2 truncate">
+                        <img 
+                            src={convertGoogleDriveUrl(selectedProduct.ImageURL)} 
+                            alt={selectedProduct.ProductName} 
+                            className="w-6 h-6 object-cover rounded flex-shrink-0"
+                            onError={(e) => (e.currentTarget.src = 'https://placehold.co/40x40/334155/94a3b8?text=Img')}
+                        />
+                        <span className="text-white truncate">{selectedProduct.ProductName}</span>
+                    </div>
+                ) : (
+                    <span className="text-gray-400">ជ្រើសរើសផលិតផល</span>
+                )}
+                
                 <svg className={`w-5 h-5 text-gray-400 transform transition-transform ${isOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
@@ -134,10 +221,19 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                                 className="px-3 py-2 text-sm text-gray-200 cursor-pointer hover:bg-blue-600 flex items-center gap-3"
                                 onClick={() => handleSelect(product.ProductName)}
                             >
-                                <img src={convertGoogleDriveUrl(product.ImageURL)} alt={product.ProductName} className="w-8 h-8 object-cover rounded" />
-                                <div>
-                                    <p className="font-semibold">{product.ProductName}</p>
-                                    <p className="text-xs text-gray-400">Barcode: {product.Barcode || 'N/A'}</p>
+                                <img 
+                                    src={convertGoogleDriveUrl(product.ImageURL)} 
+                                    alt={product.ProductName} 
+                                    className="w-8 h-8 object-cover rounded flex-shrink-0" 
+                                    onError={(e) => (e.currentTarget.src = 'https://placehold.co/40x40/334155/94a3b8?text=Img')}
+                                />
+                                <div className="truncate">
+                                    <p className="font-semibold truncate">
+                                        <HighlightMatch text={product.ProductName} highlight={debouncedSearchTerm} />
+                                    </p>
+                                    <p className="text-xs text-gray-400 truncate">
+                                        Barcode: <HighlightMatch text={product.Barcode || 'N/A'} highlight={debouncedSearchTerm} />
+                                    </p>
                                 </div>
                             </li>
                         )) : (
