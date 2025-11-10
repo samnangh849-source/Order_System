@@ -41,9 +41,23 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     
     const transformBackendMessage = useCallback((msg: BackendChatMessage): ChatMessage => {
         const user = appData.users?.find((u: User) => u.UserName === msg.UserName);
-        const finalContent = (msg.MessageType === 'image' || msg.MessageType === 'audio')
-            ? convertGoogleDriveUrl(msg.Content, msg.MessageType)
-            : msg.Content;
+        let finalContent = msg.Content;
+
+        switch (msg.MessageType) {
+            case 'image':
+                finalContent = convertGoogleDriveUrl(msg.Content, 'image');
+                break;
+            case 'audio':
+                if (msg.FileID) {
+                    // Use the backend proxy for audio files to avoid CORS/redirect issues with Google Drive.
+                    finalContent = `${WEB_APP_URL}/api/chat/audio/${msg.FileID}`;
+                } else {
+                    console.warn('Audio message is missing a FileID and cannot be played.', msg);
+                    finalContent = ''; // Return empty string if no FileID, so it won't be playable.
+                }
+                break;
+            // 'text' case is default, where finalContent remains msg.Content
+        }
 
         return {
             id: msg.Timestamp,
