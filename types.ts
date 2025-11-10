@@ -69,11 +69,19 @@ export interface Target {
     TargetAmount: number;
 }
 
+// NEW: Represents a Team/Page entry with its logo
+export interface TeamPage {
+  Team: string;
+  PageName: string;
+  TelegramValue: string;
+  PageLogoURL: string;
+}
+
 // Updated structure for data from /api/static-data
 export interface AppData {
     users: User[];
     products: MasterProduct[];
-    pages: any[]; // Formerly teams
+    pages: TeamPage[]; // Formerly any[]
     locations: any[];
     shippingMethods: any[];
     drivers: any[];
@@ -135,6 +143,7 @@ export interface BackendChatMessage {
   UserName: string;
   MessageType: 'text' | 'image' | 'audio';
   Content: string;
+  FileID?: string; // Added optional FileID from backend
 }
 
 // Represents a chat message enhanced for frontend rendering
@@ -146,4 +155,5 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   type: 'text' | 'image' | 'audio';
+  fileID?: string; // Added optional FileID for delete operations
 }

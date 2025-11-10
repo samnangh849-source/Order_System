@@ -18,7 +18,7 @@ type AdminView = 'dashboard' | 'orders' | 'reports' | 'performance' | 'config';
 const configSections = [
     { id: 'users', title: 'អ្នកប្រើប្រាស់', icon: '👤', dataKey: 'users', sheetName: 'Users', primaryKeyField: 'UserName', fields: [ { name: 'FullName', label: 'ឈ្មោះពេញ', type: 'text' }, { name: 'UserName', label: 'ឈ្មោះគណនី', type: 'text' }, { name: 'Password', label: 'ពាក្យសម្ងាត់', type: 'password' }, { name: 'Role', label: 'តួនាទី', type: 'text' }, { name: 'Team', label: 'ក្រុម', type: 'text' }, { name: 'ProfilePictureURL', label: 'URL រូបភាព', type: 'image_url' }, { name: 'IsSystemAdmin', label: 'Admin?', type: 'checkbox' } ], displayField: 'FullName' },
     { id: 'products', title: 'ផលិតផល', icon: '🛍️', dataKey: 'products', sheetName: 'Products', primaryKeyField: 'ProductName', fields: [ { name: 'ProductName', label: 'ឈ្មោះផលិតផល', type: 'text' }, { name: 'Barcode', label: 'Barcode', type: 'text' }, { name: 'Price', label: 'តម្លៃ', type: 'number' }, { name: 'Cost', label: 'តម្លៃដើម', type: 'number' }, { name: 'ImageURL', label: 'URL រូបភាព', type: 'image_url' } ], displayField: 'ProductName' },
-    { id: 'pages', title: 'ក្រុម & Page', icon: '👥', dataKey: 'pages', sheetName: 'TeamsPages', primaryKeyField: 'PageName', fields: [ { name: 'PageName', label: 'ឈ្មោះ Page', type: 'text' }, { name: 'Team', label: 'ក្រុម', type: 'text' }, { name: 'TelegramValue', label: 'Telegram Value', type: 'text' } ], displayField: 'PageName' },
+    { id: 'pages', title: 'ក្រុម & Page', icon: '👥', dataKey: 'pages', sheetName: 'TeamsPages', primaryKeyField: 'PageName', fields: [ { name: 'PageName', label: 'ឈ្មោះ Page', type: 'text' }, { name: 'Team', label: 'ក្រុម', type: 'text' }, { name: 'TelegramValue', label: 'Telegram Value', type: 'text' }, { name: 'PageLogoURL', label: 'URL ឡូហ្គោ', type: 'image_url' } ], displayField: 'PageName' },
     { id: 'shippingMethods', title: 'សេវាដឹកជញ្ជូន', icon: '🚚', dataKey: 'shippingMethods', sheetName: 'ShippingMethods', primaryKeyField: 'MethodName', fields: [ { name: 'MethodName', label: 'ឈ្មោះសេវា', type: 'text' }, { name: 'RequireDriverSelection', label: 'ត្រូវការអ្នកដឹក?', type: 'checkbox' }, { name: 'MethodLogoURL', label: 'URL ឡូហ្គោ', type: 'image_url' } ], displayField: 'MethodName' },
     { id: 'drivers', title: 'អ្នកដឹក', icon: '🛵', dataKey: 'drivers', sheetName: 'Drivers', primaryKeyField: 'DriverName', fields: [ { name: 'DriverName', label: 'ឈ្មោះអ្នកដឹក', type: 'text' }, { name: 'DriverPhotoURL', label: 'URL រូបថត', type: 'image_url' } ], displayField: 'DriverName' },
     { id: 'bankAccounts', title: 'គណនីធនាគារ', icon: '🏦', dataKey: 'bankAccounts', sheetName: 'BankAccounts', primaryKeyField: 'AccountNumber', fields: [ { name: 'BankName', label: 'ឈ្មោះធនាគារ', type: 'text' }, { name: 'AccountName', label: 'ឈ្មោះគណនី', type: 'text' }, { name: 'AccountNumber', label: 'លេខគណនី', type: 'text' }, { name: 'BankLogoURL', label: 'URL ឡូហ្គោ', type: 'image_url' } ], displayField: 'BankName' },
@@ -26,14 +26,15 @@ const configSections = [
 ];
 
 const ConfigEditModal = ({ section, item, onClose, onSave }: { section: typeof configSections[0], item: any | null, onClose: () => void, onSave: (item: any) => void }) => {
+    const { refreshData } = useContext(AppContext);
     const [formData, setFormData] = useState<any>(item || {});
     const [uploadingFields, setUploadingFields] = useState<Record<string, boolean>>({});
+    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
     const [passwordVisibility, setPasswordVisibility] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
-        // When a new item is being created, initialize formData with default values from fields
         if (!item) {
             const defaultData = section.fields.reduce((acc, field) => {
                 acc[field.name] = field.type === 'checkbox' ? false : field.type === 'number' ? 0 : '';
@@ -55,58 +56,66 @@ const ConfigEditModal = ({ section, item, onClose, onSave }: { section: typeof c
 
     const handleImageUpload = async (fieldName: string, file: File) => {
         if (!file) return;
-
         setUploadingFields(prev => ({ ...prev, [fieldName]: true }));
         setError('');
-
         try {
             const base64Data = await fileToBase64(file);
-            const payload: any = {
+            const payload = {
                 fileData: base64Data,
                 fileName: file.name,
                 mimeType: file.type,
             };
-
-            // If editing an existing item, provide sheet info for background update
-            if (item) {
-                payload.sheetName = section.sheetName;
-                payload.columnName = fieldName;
-                payload.primaryKey = {
-                    [section.primaryKeyField]: item[section.primaryKeyField]
-                };
-            }
-
             const response = await fetch(`${WEB_APP_URL}/api/upload-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-
             const result = await response.json();
             if (!response.ok || result.status !== 'success') {
                 throw new Error(result.message || 'Image upload failed');
             }
-
             setFormData((prev: any) => ({ ...prev, [fieldName]: result.url }));
-
         } catch (err) {
-            console.error(err);
             setError((err as Error).message);
         } finally {
             setUploadingFields(prev => ({ ...prev, [fieldName]: false }));
         }
     };
     
-    const handleSave = () => {
-        // Basic validation
+    const handleSave = async () => {
+        setError('');
         for (const field of section.fields) {
-            if (field.type !== 'checkbox' && !formData[field.name] && field.name !== 'Password') {
+            if (field.type !== 'checkbox' && !formData[field.name] && field.name !== 'Password' && !item) {
                  setError(`Please fill in the "${field.label}" field.`);
                  return;
             }
         }
-        alert("មុខងារនេះមិនទាន់មាននៅឡើយទេ នៅក្នុង Backend ថ្មី។");
-        onSave(formData);
+        setIsLoading(true);
+        try {
+            const endpoint = item ? '/api/admin/update-sheet' : '/api/admin/add-row';
+            const payload: any = {
+                sheetName: section.sheetName,
+                newData: formData
+            };
+            if (item) {
+                payload.primaryKey = { [section.primaryKeyField]: item[section.primaryKeyField] };
+            }
+            const response = await fetch(`${WEB_APP_URL}${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (!response.ok || result.status !== 'success') {
+                throw new Error(result.message || `Failed to ${item ? 'update' : 'add'} item.`);
+            }
+            await refreshData();
+            onSave(formData);
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setIsLoading(false);
+        }
     };
     
     return (
@@ -142,7 +151,6 @@ const ConfigEditModal = ({ section, item, onClose, onSave }: { section: typeof c
                                     <input
                                         type="file"
                                         accept="image/*"
-                                        // FIX: The ref callback should not return a value. Using a block body fixes this.
                                         ref={el => { fileInputRefs.current[field.name] = el; }}
                                         onChange={(e) => e.target.files && handleImageUpload(field.name, e.target.files[0])}
                                         className="hidden"
@@ -181,7 +189,7 @@ const ConfigEditModal = ({ section, item, onClose, onSave }: { section: typeof c
                                     aria-label="Toggle password visibility"
                                 >
                                     {passwordVisibility[field.name] ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67.126 2.454.364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67 .126 2.454 .364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
                                     ) : (
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                                     )}
@@ -204,14 +212,16 @@ const ConfigEditModal = ({ section, item, onClose, onSave }: { section: typeof c
 
              <div className="flex justify-end pt-6 space-x-4 mt-4 border-t border-gray-700">
                 <button type="button" onClick={onClose} className="btn btn-secondary">បោះបង់</button>
-                <button type="button" onClick={handleSave} className="btn btn-primary">រក្សាទុក</button>
+                <button type="button" onClick={handleSave} className="btn btn-primary" disabled={isLoading}>
+                    {isLoading ? <Spinner size="sm" /> : 'រក្សាទុក'}
+                </button>
             </div>
         </Modal>
     );
 }
 
 const ConfigView = () => {
-    const { appData } = useContext(AppContext);
+    const { appData, refreshData } = useContext(AppContext);
     const [selectedSectionId, setSelectedSectionId] = useState<string>('users'); // Default selection for desktop
     const [mobileSelectedSectionId, setMobileSelectedSectionId] = useState<string | null>(null); // For mobile view flow
     const [modalState, setModalState] = useState<{ isOpen: boolean, sectionId: string, item: any | null }>({ isOpen: false, sectionId: '', item: null });
@@ -227,15 +237,31 @@ const ConfigView = () => {
         setModalState({ isOpen: false, sectionId: '', item: null });
     };
     
-    const handleSave = (item: any) => {
-        console.log("Saving item:", item);
+    const handleSave = () => {
+        // This is now handled inside the modal, which calls refreshData on success
         closeModal();
     }
 
-    const handleDelete = (sectionTitle: string, item: any, displayField: string) => {
-        if (window.confirm(`តើអ្នកប្រាកដទេថាចង់លុប ${item[displayField || '']}?`)) {
-            alert("មុខងារនេះមិនទាន់មាននៅឡើយទេ នៅក្នុង Backend ថ្មី។");
-            console.log("Deleting item:", item);
+    const handleDelete = async (section: typeof configSections[0], item: any) => {
+        if (!window.confirm(`តើអ្នកប្រាកដទេថាចង់លុប ${item[section.displayField || '']}?`)) return;
+
+        try {
+            const payload = {
+                sheetName: section.sheetName,
+                primaryKey: { [section.primaryKeyField]: item[section.primaryKeyField] }
+            };
+            const response = await fetch(`${WEB_APP_URL}/api/admin/delete-row`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (!response.ok || result.status !== 'success') {
+                throw new Error(result.message || 'Failed to delete item.');
+            }
+            await refreshData();
+        } catch (err) {
+            alert(`Error deleting item: ${(err as Error).message}`);
         }
     }
     
@@ -270,7 +296,7 @@ const ConfigView = () => {
                             <span className="font-semibold truncate pr-2">{item[activeSection.displayField]}</span>
                             <div className="flex-shrink-0 space-x-2">
                                 <button onClick={() => openModal(activeSection.id, item)} className="btn btn-secondary !p-2 text-sm">កែ</button>
-                                <button onClick={() => handleDelete(activeSection.title, item, activeSection.displayField)} className="btn !bg-red-600/50 hover:!bg-red-600 !p-2 text-sm">លុប</button>
+                                <button onClick={() => handleDelete(activeSection, item)} className="btn !bg-red-600/50 hover:!bg-red-600 !p-2 text-sm">លុប</button>
                             </div>
                         </div>
                     ))}
@@ -344,7 +370,7 @@ const ConfigView = () => {
                                                     <td className="w-24">
                                                         <div className="flex space-x-1">
                                                             <button onClick={() => openModal(section.id, item)} className="action-btn text-yellow-400 hover:text-yellow-600 p-1" aria-label={`Edit ${item[section.displayField]}`}>✏️</button>
-                                                            <button onClick={() => handleDelete(section.title, item, section.displayField)} className="action-btn text-red-400 hover:text-red-600 p-1" aria-label={`Delete ${item[section.displayField]}`}>🗑️</button>
+                                                            <button onClick={() => handleDelete(section, item)} className="action-btn text-red-400 hover:text-red-600 p-1" aria-label={`Delete ${item[section.displayField]}`}>🗑️</button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -505,10 +531,8 @@ const AdminDashboard: React.FC = () => {
     };
 
     const handleSaveOrder = (updatedOrder: ParsedOrder) => {
-        // Here you would refresh the orders list or update the specific order in the state
         console.log('Order saved:', updatedOrder);
-        setEditingOrder(null); // Return to the list view
-        // Optionally, trigger a re-fetch of orders
+        setEditingOrder(null);
     };
 
     const renderView = () => {

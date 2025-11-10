@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useRef, useEffect, useCallback } from 'react';
 import { AppContext } from '../../App';
 import { ChatMessage, User, BackendChatMessage } from '../../types';
@@ -53,6 +54,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
             content: finalContent,
             timestamp: msg.Timestamp,
             type: msg.MessageType,
+            fileID: msg.FileID, // Include FileID
         };
     }, [appData.users]);
 
@@ -121,18 +123,19 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         };
 
         ws.onerror = (errorEvent) => {
-            console.error("WebSocket error event:", errorEvent);
+            console.error("A WebSocket error occurred. This is often followed by a 'close' event with more details. Raw event:", errorEvent);
         };
 
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (data.action === 'delete' && data.messageId) {
-                    setMessages(prev => prev.filter(msg => msg.id !== data.messageId));
+                if (data.action === 'delete_message' && data.payload?.timestamp) {
+                    setMessages(prev => prev.filter(msg => msg.id !== data.payload.timestamp));
                     return;
                 }
-                if (data.Timestamp && data.UserName) {
-                    const newMsg = transformBackendMessage(data);
+                
+                if (data.action === 'new_message' && data.payload?.Timestamp) {
+                    const newMsg = transformBackendMessage(data.payload);
                     setMessages(prev => {
                         // Prevent duplicates if message already exists
                         if (prev.some(m => m.id === newMsg.id && m.user === newMsg.user)) {
@@ -206,20 +209,25 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
 
             const result = await response.json();
 
-            // The WebSocket listener is now the single source of truth for new messages.
-            // We only check for errors here. The message will appear when the server broadcasts it.
             if (!response.ok || result.status !== 'success') {
-                let serverMessage = `Server responded with status ${response.status}.`;
+                let serverMessage;
+                // Safely extract server message
                 if (result) {
-                    if (typeof result === 'string') {
-                        serverMessage = result;
-                    } else if (typeof result.message === 'string') {
+                    if (typeof result.message === 'string' && result.message) {
                         serverMessage = result.message;
-                    } else if (typeof result.error === 'string') {
+                    } else if (typeof result.error === 'string' && result.error) {
                         serverMessage = result.error;
+                    } else if (typeof result === 'string') {
+                        serverMessage = result;
                     } else {
-                        serverMessage = JSON.stringify(result);
+                        try {
+                            serverMessage = JSON.stringify(result);
+                        } catch {
+                            serverMessage = "Could not parse server error response.";
+                        }
                     }
+                } else {
+                     serverMessage = `Server responded with status ${response.status}.`;
                 }
                 
                 let userFriendlyMessage = "ការផ្ញើសារបានបរាជ័យ។"; // "Message sending failed."
@@ -231,6 +239,9 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 throw new Error(userFriendlyMessage);
             }
 
+            // The backend returns the created message, but we let the WebSocket handle the update
+            // to maintain a single source of truth for message additions.
+
         } catch(error) {
             console.error("Error sending message:", error);
             
@@ -239,19 +250,15 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 alertMessage = error.message;
             } else if (typeof error === 'string') {
                 alertMessage = error;
+            } else if (error && typeof error === 'object') {
+                const errObj = error as any;
+                alertMessage = errObj.message || errObj.error || 'An object was thrown as an error. See console for details.';
             } else {
-                try {
-                    alertMessage = JSON.stringify(error);
-                } catch {
-                    alertMessage = String(error);
-                }
+                alertMessage = 'An unknown error occurred.';
             }
             
-            if (alertMessage && alertMessage.toLowerCase().includes('[object object]')) {
-                 alertMessage = 'An unexpected error occurred. Please check the developer console for more details.';
-            }
-
-            alert(alertMessage || 'An unknown error occurred.');
+            // Final guarantee that alert displays a readable string.
+            alert(String(alertMessage || 'An unknown error occurred.'));
             
             if (type === 'text') {
                 setNewMessage(originalMessage);
@@ -261,18 +268,25 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     
     const handleDeleteMessage = async (messageId: string) => {
         if (!currentUser || !window.confirm('តើអ្នកពិតជាចង់លុបសារនេះមែនទេ?')) return;
+
+        const messageToDelete = messages.find(m => m.id === messageId);
+        if (!messageToDelete) return;
         
         try {
             const response = await fetch(`${WEB_APP_URL}/api/chat/delete`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ UserName: currentUser.UserName, Timestamp: messageId })
+                body: JSON.stringify({ 
+                    timestamp: messageId,
+                    fileID: messageToDelete.fileID // Pass the fileID if it exists
+                })
             });
             if (!response.ok) {
                 const errData = await response.json().catch(() => ({ message: 'Server responded with an error.' }));
                 throw new Error(errData.message || 'Failed to delete the message.');
             }
-            // The websocket broadcast for delete will handle UI updates for all clients.
+            // Let the websocket handle the removal from state for all clients.
+
         } catch (error) {
             console.error("Error deleting message:", error);
             alert(`Could not delete message: ${(error as Error).message}`);

@@ -35,6 +35,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
                 fileData: base64Data,
                 fileName: file.name,
                 mimeType: compressedBlob.type,
+                userName: currentUser?.UserName || 'unknown'
             };
             const response = await fetch(`${WEB_APP_URL}/api/upload-image`, {
                 method: 'POST',
@@ -58,25 +59,51 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
         e.preventDefault();
         setError('');
 
+        if (!currentUser) {
+            setError('No user logged in.');
+            return;
+        }
+
         if (!fullName) {
             setError('សូមបំពេញឈ្មោះពេញ។');
             return;
         }
 
-        if (password !== confirmPassword) {
-            setError('ពាក្យសម្ងាត់ថ្មីមិនត្រូវគ្នាទេ។');
+        if (password) {
+            setError('ការផ្លាស់ប្តូរពាក្យសម្ងាត់មិនត្រូវបានគាំទ្រនៅក្នុងទម្រង់នេះទេ។');
             return;
         }
         
         setLoading(true);
 
-        // This feature is not implemented in the new Go backend yet.
-        // We will show an alert and close the modal to avoid a 404 error.
-        setTimeout(() => {
-            alert('មុខងារកែសម្រួល Profile មិនទាន់មាននៅឡើយទេ នៅក្នុង Backend ថ្មី។');
-            setLoading(false);
+        const payload = {
+            userName: currentUser.UserName,
+            fullName: fullName,
+            profilePictureURL: profilePicUrl,
+        };
+
+        try {
+            const response = await fetch(`${WEB_APP_URL}/api/profile/update`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || result.status !== 'success') {
+                throw new Error(result.message || 'Failed to update profile.');
+            }
+
+            // Success, refresh data and close
+            await refreshData();
             onClose();
-        }, 500);
+
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setLoading(false);
+        }
     };
     
     return (
@@ -126,12 +153,12 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
                     </div>
                 </div>
                 <div>
-                    <label htmlFor="edit-password" className="block text-sm font-medium text-gray-400 mb-2">ពាក្យសម្ងាត់ថ្មី (ទុកឲ្យនៅទំនេរ បើមិនប្តូរ)</label>
+                    <label htmlFor="edit-password" className="block text-sm font-medium text-gray-400 mb-2">ពាក្យសម្ងាត់ថ្មី (មិនអាចប្តូរនៅទីនេះបានទេ)</label>
                     <div className="relative">
-                        <input type={isPasswordVisible ? "text" : "password"} id="edit-password" value={password} onChange={(e) => setPassword(e.target.value)} className="form-input pr-10" />
+                        <input type={isPasswordVisible ? "text" : "password"} id="edit-password" value={password} onChange={(e) => setPassword(e.target.value)} className="form-input pr-10 bg-gray-800 cursor-not-allowed" disabled />
                          <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white">
                             {isPasswordVisible ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67.126 2.454.364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67 .126 2.454 .364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
                             ) : (
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                             )}
@@ -141,10 +168,10 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
                  <div>
                     <label htmlFor="edit-confirm-password" className="block text-sm font-medium text-gray-400 mb-2">បញ្ជាក់ពាក្យសម្ងាត់ថ្មី</label>
                     <div className="relative">
-                        <input type={isConfirmPasswordVisible ? "text" : "password"} id="edit-confirm-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="form-input pr-10" />
+                        <input type={isConfirmPasswordVisible ? "text" : "password"} id="edit-confirm-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="form-input pr-10 bg-gray-800 cursor-not-allowed" disabled />
                         <button type="button" onClick={() => setIsConfirmPasswordVisible(!isConfirmPasswordVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white">
                             {isConfirmPasswordVisible ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67.126 2.454.364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67 .126 2.454 .364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
                             ) : (
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                             )}
@@ -154,7 +181,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
                 {error && <p className="text-red-400 mt-2 h-5">{error}</p>}
                 <div className="flex justify-end pt-4 space-x-4">
                     <button type="button" onClick={onClose} className="btn btn-secondary">បោះបង់</button>
-                    <button type="submit" className="btn btn-primary" disabled={loading}>
+                    <button type="submit" className="btn btn-primary" disabled={loading || isUploading}>
                         {loading ? <Spinner size="sm" /> : 'រក្សាទុក'}
                     </button>
                 </div>
