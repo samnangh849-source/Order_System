@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, useRef } from 'react';
 import { AppContext } from '../../App';
 import Modal from './Modal';
@@ -70,17 +69,32 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
         }
 
         if (password) {
-            setError('ការផ្លាស់ប្តូរពាក្យសម្ងាត់មិនត្រូវបានគាំទ្រនៅក្នុងទម្រង់នេះទេ។');
-            return;
+            if (password.length < 6) {
+                setError('ពាក្យសម្ងាត់ត្រូវមានយ៉ាងតិច ៦ តួអក្សរ។');
+                return;
+            }
+            if (password !== confirmPassword) {
+                setError('ពាក្យសម្ងាត់ និងការបញ្ជាក់ពាក្យសម្ងាត់មិនตรงគ្នាទេ។');
+                return;
+            }
         }
         
         setLoading(true);
 
-        const payload = {
+        const payload: {
+            userName: string;
+            fullName: string;
+            profilePictureURL: string;
+            password?: string;
+        } = {
             userName: currentUser.UserName,
             fullName: fullName,
             profilePictureURL: profilePicUrl,
         };
+
+        if (password) {
+            payload.password = password;
+        }
 
         try {
             const response = await fetch(`${WEB_APP_URL}/api/profile/update`, {
@@ -159,9 +173,9 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
                     </div>
                 </div>
                 <div>
-                    <label htmlFor="edit-password" className="block text-sm font-medium text-gray-400 mb-2">ពាក្យសម្ងាត់ថ្មី (មិនអាចប្តូរនៅទីនេះបានទេ)</label>
+                    <label htmlFor="edit-password" className="block text-sm font-medium text-gray-400 mb-2">ពាក្យសម្ងាត់ថ្មី (ទុកឱ្យនៅទំនេរប្រសិនបើមិនចង់ប្តូរ)</label>
                     <div className="relative">
-                        <input type={isPasswordVisible ? "text" : "password"} id="edit-password" value={password} onChange={(e) => setPassword(e.target.value)} className="form-input pr-10 bg-gray-800 cursor-not-allowed" disabled />
+                        <input type={isPasswordVisible ? "text" : "password"} id="edit-password" value={password} onChange={(e) => setPassword(e.target.value)} className="form-input pr-10" />
                          <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white">
                             {isPasswordVisible ? (
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67 .126 2.454 .364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
@@ -174,7 +188,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
                  <div>
                     <label htmlFor="edit-confirm-password" className="block text-sm font-medium text-gray-400 mb-2">បញ្ជាក់ពាក្យសម្ងាត់ថ្មី</label>
                     <div className="relative">
-                        <input type={isConfirmPasswordVisible ? "text" : "password"} id="edit-confirm-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="form-input pr-10 bg-gray-800 cursor-not-allowed" disabled />
+                        <input type={isConfirmPasswordVisible ? "text" : "password"} id="edit-confirm-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="form-input pr-10" />
                         <button type="button" onClick={() => setIsConfirmPasswordVisible(!isConfirmPasswordVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white">
                             {isConfirmPasswordVisible ? (
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67 .126 2.454 .364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>

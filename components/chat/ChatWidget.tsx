@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, useRef, useEffect, useCallback } from 'react';
 import { AppContext } from '../../App';
 import { ChatMessage, User, BackendChatMessage } from '../../types';
