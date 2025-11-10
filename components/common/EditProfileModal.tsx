@@ -12,7 +12,7 @@ interface EditProfileModalProps {
 }
 
 const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
-    const { currentUser, refreshData } = useContext(AppContext);
+    const { currentUser, refreshData, updateCurrentUser } = useContext(AppContext);
     const [fullName, setFullName] = useState(currentUser?.FullName || '');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -95,7 +95,13 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
                 throw new Error(result.message || 'Failed to update profile.');
             }
 
-            // Success, refresh data and close
+            // Optimistically update the current user for instant UI feedback
+            updateCurrentUser({
+                FullName: fullName,
+                ProfilePictureURL: profilePicUrl,
+            });
+
+            // Refresh all data from server for consistency
             await refreshData();
             onClose();
 

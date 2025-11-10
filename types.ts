@@ -77,16 +77,43 @@ export interface TeamPage {
   PageLogoURL: string;
 }
 
+// --- NEW Interfaces for Static Data ---
+export interface ShippingMethod {
+    MethodName: string;
+    LogosURL: string;
+    AllowManualDriver: boolean;
+    RequireDriverSelection: boolean;
+}
+
+export interface Driver {
+    DriverName: string;
+    ImageURL: string;
+}
+
+export interface BankAccount {
+    BankName: string;
+    AccountName: string;
+    AccountNumber: string;
+    LogoURL: string;
+}
+
+export interface PhoneCarrier {
+    CarrierName: string;
+    Prefixes: string;
+    CarrierLogoURL: string;
+}
+
+
 // Updated structure for data from /api/static-data
 export interface AppData {
     users: User[];
     products: MasterProduct[];
-    pages: TeamPage[]; // Formerly any[]
+    pages: TeamPage[];
     locations: any[];
-    shippingMethods: any[];
-    drivers: any[];
-    bankAccounts: any[];
-    phoneCarriers: any[];
+    shippingMethods: ShippingMethod[];
+    drivers: Driver[];
+    bankAccounts: BankAccount[];
+    phoneCarriers: PhoneCarrier[];
     colors: any[];
     settings?: any[];
     admin?: any;

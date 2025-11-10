@@ -1,7 +1,7 @@
 
 import React, { useState, useContext, useEffect, useMemo, useRef } from 'react';
 import { AppContext } from '../App';
-import { Product as ProductType, MasterProduct } from '../types';
+import { Product as ProductType, MasterProduct, ShippingMethod, Driver, BankAccount } from '../types';
 import Spinner from '../components/common/Spinner';
 import { WEB_APP_URL } from '../constants';
 import Modal from '../components/common/Modal';
@@ -438,10 +438,10 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
 
     const handleShippingMethodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const methodName = e.target.value;
-        const methodInfo = appData.shippingMethods?.find((s: any) => s.MethodName === methodName) || null;
+        const methodInfo: ShippingMethod | null = appData.shippingMethods?.find((s: any) => s.MethodName === methodName) || null;
         
         setSelectedShippingMethod(methodInfo);
-        setShippingLogo(methodInfo ? convertGoogleDriveUrl(methodInfo.MethodLogoURL) : '');
+        setShippingLogo(methodInfo ? convertGoogleDriveUrl(methodInfo.LogosURL) : '');
         setDriverPhoto(''); // Reset driver photo when shipping method changes
 
         setOrder((prev: any) => ({
@@ -472,8 +472,8 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     };
 
     const handleDriverChange = (driverName: string) => {
-        const driverInfo = appData.drivers?.find((d: any) => d.DriverName === driverName) || null;
-        setDriverPhoto(driverInfo ? convertGoogleDriveUrl(driverInfo.DriverPhotoURL) : '');
+        const driverInfo: Driver | null = appData.drivers?.find((d: any) => d.DriverName === driverName) || null;
+        setDriverPhoto(driverInfo ? convertGoogleDriveUrl(driverInfo.ImageURL) : '');
         setOrder((prev: any) => ({
             ...prev,
             shipping: { ...prev.shipping, details: driverName }
@@ -481,8 +481,8 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     };
 
     const handleBankChange = (bankName: string) => {
-        const bankInfo = appData.bankAccounts?.find((b: any) => b.BankName === bankName) || null;
-        setBankLogo(bankInfo ? convertGoogleDriveUrl(bankInfo.BankLogoURL) : '');
+        const bankInfo: BankAccount | null = appData.bankAccounts?.find((b: any) => b.BankName === bankName) || null;
+        setBankLogo(bankInfo ? convertGoogleDriveUrl(bankInfo.LogoURL) : '');
         setOrder((prev: any) => ({
             ...prev,
             payment: { ...prev.payment, info: bankName }

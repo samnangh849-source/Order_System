@@ -18,12 +18,6 @@ declare global {
     }
 }
 
-// Mock environment variable for demonstration
-// In a real environment, this would be set through a build process or server-side injection.
-if (!process.env.API_KEY) {
-    process.env.API_KEY = "YOUR_GEMINI_API_KEY"; // Replace with a placeholder or handle appropriately
-}
-
 export const AppContext = React.createContext<{
     currentUser: User | null;
     originalAdminUser: User | null;
@@ -33,7 +27,9 @@ export const AppContext = React.createContext<{
     loginAs: (targetUser: User) => void;
     returnToAdmin: () => void;
     refreshData: () => Promise<void>;
+    updateCurrentUser: (updatedData: Partial<User>) => void;
     geminiAi: GoogleGenAI | null;
+    apiKey: string | null;
     isChatVisible: boolean;
     setChatVisibility: (visible: boolean) => void;
     previewImage: (url: string) => void;
@@ -46,7 +42,9 @@ export const AppContext = React.createContext<{
     loginAs: () => {},
     returnToAdmin: () => {},
     refreshData: async () => {},
+    updateCurrentUser: () => {},
     geminiAi: null,
+    apiKey: null,
     isChatVisible: true,
     setChatVisibility: () => {},
     previewImage: () => {},
@@ -125,6 +123,7 @@ const App: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(true);
     const [appState, setAppState] = useState<'login' | 'role_selection' | 'user_journey' | 'admin_dashboard'>('login');
     const [geminiAi, setGeminiAi] = useState<GoogleGenAI | null>(null);
+    const [apiKey, setApiKey] = useState<string | null>(null);
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [isChatVisible, setIsChatVisible] = useState(true);
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -305,8 +304,22 @@ const App: React.FC = () => {
 
     useEffect(() => {
         checkSession();
-        if (process.env.API_KEY && process.env.API_KEY !== "YOUR_GEMINI_API_KEY") {
-             setGeminiAi(new GoogleGenAI({apiKey: process.env.API_KEY}));
+        
+        let key: string | undefined;
+        try {
+            // This will work in environments where a build tool replaces process.env
+            if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+                key = process.env.API_KEY;
+            }
+        } catch (e) {
+            // This catch block handles cases where 'process' is not defined, 
+            // which is expected on static hosting like GitHub Pages.
+            console.warn('`process.env` is not available. This is normal for static hosting.');
+        }
+
+        if (key && key !== "YOUR_GEMINI_API_KEY") {
+             setApiKey(key);
+             setGeminiAi(new GoogleGenAI({apiKey: key}));
         } else {
             console.warn("Gemini API key is not configured. AI features will be disabled.");
         }
@@ -351,6 +364,15 @@ const App: React.FC = () => {
     const refreshData = async () => {
         await fetchData(true);
     };
+
+    const updateCurrentUser = (updatedData: Partial<User>) => {
+        if (currentUser) {
+            const newUser = { ...currentUser, ...updatedData };
+            setCurrentUser(newUser);
+            const sessionData = { user: newUser, timestamp: new Date().getTime() };
+            localStorage.setItem('orderAppSession', JSON.stringify(sessionData));
+        }
+    };
     
     const previewImage = (url: string) => {
         if (url && !url.includes('placehold.co')) {
@@ -385,7 +407,7 @@ const App: React.FC = () => {
     };
     
     return (
-        <AppContext.Provider value={{ currentUser, originalAdminUser, appData, login, logout, loginAs, returnToAdmin, refreshData, geminiAi, isChatVisible, setChatVisibility: setIsChatVisible, previewImage }}>
+        <AppContext.Provider value={{ currentUser, originalAdminUser, appData, login, logout, loginAs, returnToAdmin, refreshData, updateCurrentUser, geminiAi, apiKey, isChatVisible, setChatVisibility: setIsChatVisible, previewImage }}>
             <div className="min-h-screen w-full">
                 {originalAdminUser && <ImpersonationBanner />}
                 {currentUser && <Header onBackToRoleSelect={() => setAppState('role_selection')} />}
