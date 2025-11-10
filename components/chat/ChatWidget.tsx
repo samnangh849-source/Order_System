@@ -16,8 +16,8 @@ interface ChatWidgetProps {
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 type ActiveTab = 'chat' | 'users';
 
-// Use a valid, silent WAV file to prevent console errors.
-const notificationSound = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAEAAC/gAAAAA==');
+// Use the custom notification sound. Assumes `notification.mp3` is in the public folder.
+const notificationSound = new Audio('/notification.mp3');
 
 const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     const { currentUser, appData, previewImage } = useContext(AppContext);
