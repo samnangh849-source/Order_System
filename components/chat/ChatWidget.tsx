@@ -2,11 +2,11 @@ import React, { useState, useContext, useRef, useEffect, useCallback } from 'rea
 import { AppContext } from '../../App';
 import { ChatMessage, User, BackendChatMessage } from '../../types';
 import Spinner from '../common/Spinner';
-// import { useAudioRecorder } from '../../hooks/useAudioRecorder'; // Feature removed
+import { useAudioRecorder } from '../../hooks/useAudioRecorder';
 import { compressImage } from '../../utils/imageCompressor';
 import { WEB_APP_URL } from '../../constants';
 import AudioPlayer from './AudioPlayer';
-import { fileToBase64, convertGoogleDriveUrl } from '../../utils/fileUtils';
+import { fileToBase64, convertGoogleDriveUrl, fileToDataUrl } from '../../utils/fileUtils';
 
 interface ChatWidgetProps {
     isOpen: boolean;
@@ -16,8 +16,8 @@ interface ChatWidgetProps {
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 type ActiveTab = 'chat' | 'users';
 
-// Use the custom notification sound. Assumes `notification.mp3` is in the public folder.
-const notificationSound = new Audio('/notification.mp3');
+// Use the correct raw GitHub content URL for the notification sound.
+const notificationSound = new Audio('https://raw.githubusercontent.com/samnangh849-source/Order_System/161d6d021a97e44c116a2c1b703dbe46f0e206f4/notification.mp3?raw=true');
 
 const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     const { currentUser, appData, previewImage } = useContext(AppContext);
@@ -34,7 +34,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
-    // Voice recording feature removed
+    const { isRecording, startRecording, stopRecording } = useAudioRecorder();
     const hasFetchedHistory = useRef(false);
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -206,10 +206,9 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 body: JSON.stringify(payload)
             });
 
-            const result = await response.json();
-
-            if (!response.ok || result.status !== 'success') {
-                let serverMessage;
+            if (!response.ok) {
+                 const result = await response.json().catch(() => null);
+                 let serverMessage;
                 // Safely extract server message
                 if (result) {
                     if (typeof result.message === 'string' && result.message) {
@@ -229,7 +228,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                      serverMessage = `Server responded with status ${response.status}.`;
                 }
                 
-                let userFriendlyMessage = "ការផ្ញើសារបានបរាជ័យ។"; // "Message sending failed."
+                let userFriendlyMessage = "การផ្ញើសារបានបរាជ័យ។"; // "Message sending failed."
                 if (serverMessage.includes('Upload Folder ID is not configured')) {
                     userFriendlyMessage = 'ការផ្ញើសារបានបរាជ័យ។ ការកំណត់រចនាសម្ព័ន្ធការ Upload ឯកសារលើ Server មិនត្រឹមត្រូវទេ។';
                 } else {
@@ -238,26 +237,21 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 throw new Error(userFriendlyMessage);
             }
 
-            // The backend returns the created message, but we let the WebSocket handle the update
-            // to maintain a single source of truth for message additions.
-
         } catch(error) {
             console.error("Error sending message:", error);
             
-            let alertMessage;
+            let alertMessage = "An unknown error occurred while sending the message.";
             if (error instanceof Error) {
-                alertMessage = error.message;
+                if (error.message.toLowerCase().includes('failed to fetch')) {
+                    alertMessage = "Message failed to send. This may be due to a network connection issue or the server being temporarily unavailable. Please check your connection and try again.";
+                } else {
+                    alertMessage = error.message;
+                }
             } else if (typeof error === 'string') {
-                alertMessage = error;
-            } else if (error && typeof error === 'object') {
-                const errObj = error as any;
-                alertMessage = errObj.message || errObj.error || 'An object was thrown as an error. See console for details.';
-            } else {
-                alertMessage = 'An unknown error occurred.';
+                 alertMessage = error;
             }
             
-            // Final guarantee that alert displays a readable string.
-            alert(String(alertMessage || 'An unknown error occurred.'));
+            alert(String(alertMessage));
             
             if (type === 'text') {
                 setNewMessage(originalMessage);
@@ -296,17 +290,49 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         if (!file) return;
         setIsUploading(true);
         try {
+             const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+            if (file.size > MAX_FILE_SIZE) {
+                alert(`Image file is too large (${(file.size / 1024 / 1024).toFixed(2)} MB). Please keep files under 10 MB.`);
+                return;
+            }
             const processedFile = await compressImage(file);
             const base64Data = await fileToBase64(processedFile);
             await handleSendMessage(base64Data, 'image', processedFile.type);
         } catch (error) {
             console.error(`Failed to upload image:`, error);
+            alert('Failed to upload image. Please try again.');
         } finally {
             setIsUploading(false);
             if (fileInputRef.current) {
                 fileInputRef.current.value = '';
             }
         }
+    };
+
+    const handleStartRecording = async () => {
+        if (newMessage) setNewMessage('');
+        await startRecording();
+    };
+
+    const handleStopRecording = async () => {
+        setIsUploading(true);
+        const audioBlob = await stopRecording();
+        if (audioBlob) {
+            const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+            if (audioBlob.size > MAX_FILE_SIZE) {
+                alert(`Audio file is too large (${(audioBlob.size / 1024 / 1024).toFixed(2)} MB). Please keep recordings under 10 MB.`);
+                setIsUploading(false);
+                return;
+            }
+            try {
+                const base64Data = await fileToBase64(audioBlob);
+                await handleSendMessage(base64Data, 'audio', audioBlob.type);
+            } catch (error) {
+                console.error("Failed to process audio:", error);
+                alert("Failed to process audio recording.");
+            }
+        }
+        setIsUploading(false);
     };
     
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -481,8 +507,8 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                             ))}
                         </div>
                     )}
-                    <button className="icon-btn" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-                        {isUploading ? <Spinner size="sm"/> :
+                    <button className="icon-btn" onClick={() => fileInputRef.current?.click()} disabled={isUploading || isRecording}>
+                        {isUploading && !isRecording ? <Spinner size="sm"/> :
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                         }
                     </button>
@@ -495,14 +521,36 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                             value={newMessage}
                             onChange={handleInputChange}
                             onKeyDown={handleKeyDown}
-                            placeholder="វាយសារ..." 
-                            className="form-input"
+                            placeholder={isRecording ? "កំពុងថត..." : "វាយសារ..."}
+                            className="form-input !pr-12"
+                            disabled={isRecording}
                         />
-                        <button onClick={() => handleSendMessage(newMessage, 'text')} className="send-btn" disabled={!newMessage.trim()}>
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                              <path d="M3.105 3.106a.75.75 0 01.884-.043l11.25 6.5a.75.75 0 010 1.273l-11.25 6.5a.75.75 0 01-1.273-.636V3.742a.75.75 0 01.43-.636z" />
-                            </svg>
-                        </button>
+                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
+                            {newMessage.trim() && !isRecording ? (
+                                <button onClick={() => handleSendMessage(newMessage, 'text')} className="send-btn" disabled={!newMessage.trim()}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                      <path d="M3.105 3.106a.75.75 0 01.884-.043l11.25 6.5a.75.75 0 010 1.273l-11.25 6.5a.75.75 0 01-1.273-.636V3.742a.75.75 0 01.43-.636z" />
+                                    </svg>
+                                </button>
+                             ) : (
+                                <button 
+                                    className={`icon-btn p-2 ${isRecording ? 'recording' : ''}`} 
+                                    onClick={isRecording ? handleStopRecording : handleStartRecording} 
+                                    disabled={isUploading}
+                                    title={isRecording ? "ឈប់ថត" : "ថតសារជាសម្លេង"}
+                                >
+                                    {isUploading ? <Spinner size="sm" /> :
+                                        isRecording ? 
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 9a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clipRule="evenodd" />
+                                        </svg> :
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                        </svg>
+                                    }
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
