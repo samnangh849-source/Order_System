@@ -356,13 +356,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                                     src={convertGoogleDriveUrl(product.ImageURL)} 
                                     alt={product.ProductName} 
                                     className="w-8 h-8 object-cover rounded" 
-                                    // --- [FIX] បន្ថែម onError ឡើងវិញ តាមរូបគំរូដែលអ្នកផ្ញើអោយ ---
-                                    // បើ Load រូបពិតមិនបាន វានឹងបង្ហាញប្រអប់ពណ៌ប្រផេះជំនួស (មិនមានអក្សរ)
-                                    onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.onerror = null; // ការពារកុំអោយ Loop
-                                        target.src = 'https://placehold.co/32x32/6b7280/6b7280'; // 32x32 gray box
-                                    }}
+                                    // --- [FIX] បានដក onError ចេញ ត្រឡប់ទៅតាមគំរូ Code ដើមវិញ ---
                                 />
                                 <div className="truncate">
                                     <p className="font-semibold truncate">
