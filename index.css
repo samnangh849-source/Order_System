@@ -1,3 +1,4 @@
+
 /* General Body & Flare */
 body {
     font-family: 'Kantumruy Pro', sans-serif;
@@ -764,28 +765,32 @@ body {
 .progress-bar {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
+    align-items: flex-start; /* Align items to the top for consistent alignment */
+    margin-bottom: 2.5rem; /* More margin to accommodate labels */
     position: relative;
+    padding: 0 10px; /* Padding for small screens */
 }
+/* This is the gray line underneath */
 .progress-line {
     position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
+    top: 16px; /* Vertically center with the 32px circle */
+    left: 5%;
+    width: 90%;
     height: 2px;
-    background-color: #374151;
+    background-color: #374151; /* Line color from image */
     transform: translateY(-50%);
     z-index: 1;
 }
+/* This is the blue progress line that animates */
 .progress-line-active {
     position: absolute;
-    top: 50%;
-    left: 0;
+    top: 16px; /* Vertically center with the 32px circle */
+    left: 5%;
+    width: 0; /* Starts at 0, width controlled by inline style */
     height: 2px;
     background-color: #3b82f6;
     transform: translateY(-50%);
-    transition: width 0.3s ease-in-out;
+    transition: width 0.4s ease-in-out;
     z-index: 2;
 }
 .progress-step {
@@ -794,35 +799,73 @@ body {
     align-items: center;
     text-align: center;
     z-index: 3;
+    width: 80px; /* Give some space for labels to not overlap */
 }
+
+/* Default state (Upcoming) - matches step 2, 3, 4 in image */
 .progress-step-circle {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    border: 2px solid #374151;
-    background-color: #111827;
+    border: 2px solid #4b5563; /* Lighter gray border */
+    background-color: #1f2937; /* Dark background inside circle */
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: bold;
-    color: #6b7280;
-    transition: all 0.3s ease-in-out;
+    color: #9ca3af; /* Muted number color */
+    transition: all 0.4s ease-in-out;
 }
 .progress-step-label {
     margin-top: 0.5rem;
-    font-size: 0.75rem;
+    font-size: 0.8rem; /* A bit larger for readability */
     font-weight: 500;
-    color: #6b7280;
-    transition: color 0.3s ease-in-out;
+    color: #6b7280; /* Muted label color */
+    transition: color 0.4s ease-in-out;
+    line-height: 1.2; /* Better line spacing for potential wrapping */
 }
-.progress-step.active .progress-step-circle {
-    background-color: #3b82f6;
+
+/* Completed state - checkmark */
+.progress-step.completed .progress-step-circle {
+    background-color: #3b82f6; /* Blue background */
     border-color: #3b82f6;
     color: white;
 }
-.progress-step.active .progress-step-label {
-    color: #d1d5db;
+.progress-step.completed .progress-step-label {
+    color: #d1d5db; /* Brighter label */
 }
+
+/* Active (current) state - matches step 1 in image */
+.progress-step.active .progress-step-circle {
+    background-color: #3b82f6; /* Bright blue background */
+    border-color: #3b82f6;
+    color: white;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3); /* Add a subtle glow for emphasis */
+}
+.progress-step.active .progress-step-label {
+    color: #ffffff; /* Brightest white label */
+    font-weight: 600;
+}
+
+@media (max-width: 640px) {
+    .progress-bar {
+        padding: 0;
+    }
+    .progress-line {
+        left: 3%;
+        width: 94%;
+    }
+    .progress-line-active {
+        left: 3%;
+    }
+    .progress-step {
+        width: 65px; /* Narrower for mobile */
+    }
+    .progress-step-label {
+        font-size: 0.7rem; /* Smaller font on mobile to prevent wrapping */
+    }
+}
+
 
 /* Reports View Styles */
 .report-tabs {

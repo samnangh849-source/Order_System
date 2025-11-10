@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useEffect, useMemo, useRef } from 'react';
 import { AppContext } from '../App';
 import { Product as ProductType, MasterProduct } from '../types';
@@ -89,7 +90,7 @@ const MapModal: React.FC<{ isOpen: boolean; onClose: () => void; url: string; }>
 
 
 const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, onCancel }) => {
-    const { appData, currentUser, previewImage } = useContext(AppContext);
+    const { appData, currentUser, previewImage, apiKey } = useContext(AppContext);
     const [currentStep, setCurrentStep] = useState(1);
     const [order, setOrder] = useState<any>({
         page: '',
@@ -504,14 +505,14 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     };
     
     const handleSearchOnMaps = () => {
-        if (!process.env.API_KEY || process.env.API_KEY === "YOUR_GEMINI_API_KEY") {
+        if (!apiKey) {
             alert("មុខងារផែនទីត្រូវការ API Key។ សូមកំណត់រចនាសម្ព័ន្ធ API Key ជាមុនសិន។\n(Map feature requires an API Key. Please configure it first.)");
             return;
         }
         const { province, district, sangkat, additionalLocation } = order.customer;
         const queryParts = [additionalLocation, sangkat, district, province, 'Cambodia'].filter(Boolean);
         const query = queryParts.join(', ');
-        const mapsUrl = `https://www.google.com/maps/embed/v1/search?key=${process.env.API_KEY}&q=${encodeURIComponent(query)}`;
+        const mapsUrl = `https://www.google.com/maps/embed/v1/search?key=${apiKey}&q=${encodeURIComponent(query)}`;
         setMapSearchUrl(mapsUrl);
         setIsMapModalOpen(true);
     };
@@ -1089,8 +1090,16 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                     <div className="progress-line"></div>
                     <div className="progress-line-active" style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` }}></div>
                     {STEPS.map(step => (
-                        <div key={step.number} className={`progress-step ${currentStep >= step.number ? 'active' : ''}`}>
-                            <div className="progress-step-circle">{step.number}</div>
+                        <div key={step.number} className={`progress-step ${step.number === currentStep ? 'active' : ''} ${step.number < currentStep ? 'completed' : ''}`}>
+                            <div className="progress-step-circle">
+                                {step.number < currentStep ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                ) : (
+                                    step.number
+                                )}
+                            </div>
                             <div className="progress-step-label">{step.title}</div>
                         </div>
                     ))}
