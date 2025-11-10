@@ -17,7 +17,7 @@ type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 type ActiveTab = 'chat' | 'users';
 
 // Use the correct raw GitHub content URL for the notification sound.
-const notificationSound = new Audio('https://raw.githubusercontent.com/samnangh849-source/Order_System/161d6d021a97e44c116a2c1b703dbe46f0e206f4/notification.mp3?raw=true');
+const notificationSound = new Audio('/assets/notification.mp3');
 
 const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     const { currentUser, appData, previewImage } = useContext(AppContext);
