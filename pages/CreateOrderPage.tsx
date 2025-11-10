@@ -6,6 +6,7 @@ import Spinner from '../components/common/Spinner';
 import { WEB_APP_URL } from '../constants';
 import Modal from '../components/common/Modal';
 import { convertGoogleDriveUrl } from '../utils/fileUtils';
+import SearchableProductDropdown from '../components/common/SearchableProductDropdown.tsx';
 
 interface CreateOrderPageProps {
     team: string;
@@ -789,10 +790,11 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                         </div>
                                         <div className="col-span-9 sm:col-span-5">
                                             <label className="input-label">ផលិតផល*</label>
-                                            <select value={p.name} onChange={(e) => handleProductUpdate(index, 'name', e.target.value)} className="form-select" required>
-                                                <option value="">ជ្រើសរើស</option>
-                                                {appData.products?.map((prod: MasterProduct) => <option key={prod.ProductName} value={prod.ProductName}>{prod.ProductName}</option>)}
-                                            </select>
+                                            <SearchableProductDropdown
+                                                products={appData.products || []}
+                                                selectedProductName={p.name}
+                                                onSelect={(productName) => handleProductUpdate(index, 'name', productName)}
+                                            />
                                         </div>
                                         <div className="col-span-4 sm:col-span-2">
                                             <label className="input-label">ចំនួន*</label>
