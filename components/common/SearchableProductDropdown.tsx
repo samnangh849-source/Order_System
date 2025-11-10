@@ -222,7 +222,8 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         // 3. Filter និង Sort
         return scoredProducts
             .filter(item => item.score > 0)
-            .sort((a, b) => b.score - a.score) // Sort តាមពិន្ទុ (ខ្ពស់ទៅទាប)
+             // --- [FIX] ឆ្លាស់ការ Sort បញ្ច្រាស់ពីមុន (ទាបទៅខ្ពស់) ---
+            .sort((a, b) => a.score - b.score)
             .map(item => item.product);
     
     }, [products, debouncedSearchTerm]);
