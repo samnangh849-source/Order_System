@@ -40,12 +40,15 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
     
     const filteredProducts = useMemo(() => {
         if (!searchTerm) return products;
-        const lowercasedFilter = searchTerm.toLowerCase();
-        return products.filter(product =>
-            product.ProductName.toLowerCase().includes(lowercasedFilter) ||
-            (product.Barcode && product.Barcode.toLowerCase().includes(lowercasedFilter))
-        );
+        const searchTerms = searchTerm.toLowerCase().split(' ').filter(Boolean);
+        if (searchTerms.length === 0) return products;
+
+        return products.filter(product => {
+            const productText = `${product.ProductName.toLowerCase()} ${product.Barcode ? product.Barcode.toLowerCase() : ''}`;
+            return searchTerms.every(term => productText.includes(term));
+        });
     }, [products, searchTerm]);
+
 
     const handleSelect = (productName: string) => {
         onSelect(productName);

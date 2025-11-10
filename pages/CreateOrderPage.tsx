@@ -6,7 +6,7 @@ import Spinner from '../components/common/Spinner';
 import { WEB_APP_URL } from '../constants';
 import Modal from '../components/common/Modal';
 import { convertGoogleDriveUrl } from '../utils/fileUtils';
-import SearchableProductDropdown from '../components/common/SearchableProductDropdown.tsx';
+import SearchableProductDropdown from '../components/common/SearchableProductDropdown';
 
 interface CreateOrderPageProps {
     team: string;
@@ -553,6 +553,10 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                     setError('វិធីសាស្រ្តនេះតម្រូវឱ្យជ្រើសរើសអ្នកដឹក។');
                     return false;
                 }
+                if (order.shipping.cost === '' || order.shipping.cost === null) {
+                    setError('សូមបញ្ចូលតម្លៃដឹក (ថ្លៃសេវាឲ្យអ្នកដឹក)។');
+                    return false;
+                }
                 return true;
             case 4:
                  if (order.payment.status === 'Paid' && !order.payment.info) {
@@ -924,10 +928,11 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                 <input
                                     type="number"
                                     name="cost"
-                                    placeholder="តម្លៃដឹក (ថ្លៃសេវា អោយអ្នកដឹក)"
+                                    placeholder="តម្លៃដឹក (ថ្លៃសេវា អោយអ្នកដឹក)*"
                                     value={order.shipping.cost}
                                     className="form-input pr-8"
                                     onChange={handleShippingChange}
+                                    required
                                 />
                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
                             </div>
@@ -955,7 +960,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                 return (
                     <div className="animate-fade-in space-y-6">
                          <div>
-                            <h3 className="text-lg font-semibold text-blue-300 mb-2">สรุปรายการ</h3>
+                            <h3 className="text-lg font-semibold text-blue-300 mb-2">សង្ខេបការកម្មង់</h3>
                              <div className="p-4 bg-gray-800/50 rounded-lg text-sm space-y-2 border border-gray-700">
                                 <p><strong>Page:</strong> {order.page}</p>
                                 <p><strong>ឈ្មោះ:</strong> {order.customer.name} ({order.customer.phone})</p>
