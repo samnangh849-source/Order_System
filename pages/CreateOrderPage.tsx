@@ -139,7 +139,34 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
 
      const provinces = useMemo(() => {
         if (!appData.locations) return [];
-        return [...new Set(appData.locations.map((loc: any) => loc.Province))].sort();
+        const uniqueProvinces = [...new Set(appData.locations.map((loc: any) => loc.Province))];
+
+        // Sort alphabetically using Khmer locale
+        // FIX: Cast to string to prevent type errors on sort.
+        uniqueProvinces.sort((a, b) => String(a).localeCompare(String(b), 'km'));
+
+        // Prioritize "Phnom Penh"
+        const phnomPenhVariants = ["phnom penh", "ភ្នំពេញ", "រាជធានីភ្នំពេញ"];
+        let phnomPenhActualName: string | null = null;
+        let phnomPenhIndex = -1;
+
+        for (const variant of phnomPenhVariants) {
+            // FIX: Cast to string to prevent type errors on findIndex.
+            const index = uniqueProvinces.findIndex(p => String(p).toLowerCase() === variant);
+            if (index !== -1) {
+                // FIX: Cast to string to prevent type errors on assignment.
+                phnomPenhActualName = String(uniqueProvinces[index]);
+                phnomPenhIndex = index;
+                break;
+            }
+        }
+        
+        if (phnomPenhActualName && phnomPenhIndex > 0) {
+            uniqueProvinces.splice(phnomPenhIndex, 1);
+            uniqueProvinces.unshift(phnomPenhActualName);
+        }
+
+        return uniqueProvinces;
     }, [appData.locations]);
 
     const districts = useMemo(() => {
@@ -147,7 +174,8 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
         return [...new Set(appData.locations
             .filter((loc: any) => loc.Province === order.customer.province)
             .map((loc: any) => loc.District))]
-            .sort();
+            // FIX: Cast to string to prevent type errors on sort.
+            .sort((a, b) => String(a).localeCompare(String(b), 'km'));
     }, [appData.locations, order.customer.province]);
 
     const sangkats = useMemo(() => {
@@ -156,7 +184,8 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
             .filter((loc: any) => loc.Province === order.customer.province && loc.District === order.customer.district)
             .map((loc: any) => loc.Sangkat)
             .filter(Boolean))]
-            .sort();
+            // FIX: Cast to string to prevent type errors on sort.
+            .sort((a, b) => String(a).localeCompare(String(b), 'km'));
     }, [appData.locations, order.customer.province, order.customer.district]);
 
     useEffect(() => {

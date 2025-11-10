@@ -42,11 +42,56 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         if (!searchTerm) return products;
         const searchTerms = searchTerm.toLowerCase().split(' ').filter(Boolean);
         if (searchTerms.length === 0) return products;
+    
+        const scoredProducts = products.map(product => {
+            const lowerProductName = product.ProductName.toLowerCase();
+            const lowerBarcode = (product.Barcode || '').toLowerCase();
+            let score = 0;
+            let matchesAll = true;
+    
+            for (const term of searchTerms) {
+                const productNameContains = lowerProductName.includes(term);
+                const barcodeContains = lowerBarcode.includes(term);
+                
+                if (!productNameContains && !barcodeContains) {
+                    matchesAll = false;
+                    break;
+                }
+    
+                if (lowerProductName.startsWith(term)) {
+                    score += 10;
+                } else if (productNameContains) {
+                    score += 1;
+                }
+                
+                if (lowerBarcode.startsWith(term)) {
+                    score += 5;
+                } else if (barcodeContains) {
+                    score += 1;
+                }
+            }
+            
+            // Give a larger bonus for matches against the full search term
+            const fullSearchTerm = searchTerm.toLowerCase();
+            if (lowerProductName.startsWith(fullSearchTerm)) {
+                score += 20;
+            }
+            if (lowerBarcode.startsWith(fullSearchTerm)) {
+                score += 15;
+            }
 
-        return products.filter(product => {
-            const productText = `${product.ProductName.toLowerCase()} ${product.Barcode ? product.Barcode.toLowerCase() : ''}`;
-            return searchTerms.every(term => productText.includes(term));
+            if (!matchesAll) {
+                score = 0;
+            }
+            
+            return { product, score };
         });
+    
+        return scoredProducts
+            .filter(item => item.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .map(item => item.product);
+    
     }, [products, searchTerm]);
 
 
