@@ -56,27 +56,43 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         };
     }, [appData.users]);
 
+    const fetchHistory = useCallback(async (isInitialLoad = false) => {
+        if (isInitialLoad) {
+            setIsHistoryLoading(true);
+        }
+        try {
+            const response = await fetch(`${WEB_APP_URL}/api/chat/messages`);
+            if (!response.ok) throw new Error("Failed to fetch chat history");
+            const result = await response.json();
+            if (result.status === 'success' && Array.isArray(result.data)) {
+                const fetchedMessages = result.data.map(transformBackendMessage);
+                setMessages(currentMessages => {
+                    const messageMap = new Map<string, ChatMessage>();
+                    // For reconnects, add current messages first to preserve state
+                    if (!isInitialLoad) {
+                        currentMessages.forEach(msg => messageMap.set(msg.id, msg));
+                    }
+                    // Add fetched messages, overwriting/adding new ones
+                    fetchedMessages.forEach(msg => messageMap.set(msg.id, msg));
+                    // Convert back to array and sort by timestamp
+                    return Array.from(messageMap.values()).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                });
+            }
+        } catch (error) {
+            console.error("Chat history error:", error);
+        } finally {
+            if (isInitialLoad) {
+                setIsHistoryLoading(false);
+                hasFetchedHistory.current = true;
+            }
+        }
+    }, [transformBackendMessage]);
+
     useEffect(() => {
         if (isOpen && !hasFetchedHistory.current) {
-            const fetchHistory = async () => {
-                setIsHistoryLoading(true);
-                try {
-                    const response = await fetch(`${WEB_APP_URL}/api/chat/messages`);
-                    if (!response.ok) throw new Error("Failed to fetch chat history");
-                    const result = await response.json();
-                    if (result.status === 'success' && Array.isArray(result.data)) {
-                        setMessages(result.data.map(transformBackendMessage));
-                    }
-                } catch (error) {
-                    console.error("Chat history error:", error);
-                } finally {
-                    setIsHistoryLoading(false);
-                    hasFetchedHistory.current = true;
-                }
-            };
-            fetchHistory();
+            fetchHistory(true); // isInitialLoad = true
         }
-    }, [isOpen, transformBackendMessage]);
+    }, [isOpen, fetchHistory]);
 
     const connectWebSocket = useCallback(() => {
         if (wsRef.current && wsRef.current.readyState < 2) { // 0: CONNECTING, 1: OPEN
@@ -91,6 +107,8 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         ws.onopen = () => {
             console.log("WebSocket connected");
             setConnectionStatus('connected');
+            // On connect/reconnect, fetch any messages that might have been missed.
+            fetchHistory(false); // isInitialLoad = false
         };
 
         ws.onclose = (event) => {
@@ -103,9 +121,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         };
 
         ws.onerror = (errorEvent) => {
-            console.error("WebSocket error:", errorEvent);
-            // The browser will fire 'onclose' automatically after an error,
-            // which will then handle reconnection logic. No need to call ws.close() here.
+            console.error("WebSocket error event:", errorEvent);
         };
 
         ws.onmessage = (event) => {
@@ -117,7 +133,14 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 }
                 if (data.Timestamp && data.UserName) {
                     const newMsg = transformBackendMessage(data);
-                    setMessages(prev => [...prev, newMsg]);
+                    setMessages(prev => {
+                        // Prevent duplicates if message already exists
+                        if (prev.some(m => m.id === newMsg.id && m.user === newMsg.user)) {
+                            return prev;
+                        }
+                        return [...prev, newMsg];
+                    });
+
                     if (newMsg.user !== currentUser?.UserName && !isMuted) {
                        notificationSound.play().catch(e => console.log("Notification sound blocked by browser."));
                     }
@@ -126,7 +149,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 console.error("Failed to parse WebSocket message:", error);
             }
         };
-    }, [isOpen, currentUser?.UserName, isMuted, transformBackendMessage]);
+    }, [isOpen, currentUser?.UserName, isMuted, transformBackendMessage, fetchHistory]);
 
     useEffect(() => {
         if (isOpen && hasFetchedHistory.current) {
@@ -158,7 +181,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         localStorage.setItem('chatMuted', String(newMutedState));
     };
     
-    const handleSendMessage = async (content: string, type: 'text' | 'image', mimeType?: string) => {
+    const handleSendMessage = async (content: string, type: 'text' | 'image' | 'audio', mimeType?: string) => {
         if (!currentUser || !content.trim()) return;
 
         let originalMessage = '';
@@ -168,10 +191,10 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         }
         
         const payload: any = {
-            UserName: currentUser.UserName,
-            MessageType: type,
-            Content: content.trim(),
-            ...(mimeType && { MimeType: mimeType }),
+            userName: currentUser.UserName,
+            type: type,
+            content: content.trim(),
+            ...(mimeType && { mimeType: mimeType }),
         };
 
         try {
@@ -181,22 +204,55 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 body: JSON.stringify(payload)
             });
 
-            if (!response.ok) {
-                let errorMessage = "ការផ្ញើសារបានបរាជ័យ។";
-                try {
-                    const errorData = await response.json();
-                    if (errorData?.message?.includes('Upload Folder ID is not configured')) {
-                         errorMessage = 'ការផ្ញើសារបានបរាជ័យ។ ការកំណត់រចនាសម្ព័ន្ធការ Upload ឯកសារលើ Server មិនត្រឹមត្រូវទេ។';
+            const result = await response.json();
+
+            // The WebSocket listener is now the single source of truth for new messages.
+            // We only check for errors here. The message will appear when the server broadcasts it.
+            if (!response.ok || result.status !== 'success') {
+                let serverMessage = `Server responded with status ${response.status}.`;
+                if (result) {
+                    if (typeof result === 'string') {
+                        serverMessage = result;
+                    } else if (typeof result.message === 'string') {
+                        serverMessage = result.message;
+                    } else if (typeof result.error === 'string') {
+                        serverMessage = result.error;
                     } else {
-                        errorMessage += ` Server បានឆ្លើយតបថា: ${errorData.message}`;
+                        serverMessage = JSON.stringify(result);
                     }
-                } catch (e) { errorMessage += ` Status: ${response.status}`; }
-                throw new Error(errorMessage);
+                }
+                
+                let userFriendlyMessage = "ការផ្ញើសារបានបរាជ័យ។"; // "Message sending failed."
+                if (serverMessage.includes('Upload Folder ID is not configured')) {
+                    userFriendlyMessage = 'ការផ្ញើសារបានបរាជ័យ។ ការកំណត់រចនាសម្ព័ន្ធការ Upload ឯកសារលើ Server មិនត្រឹមត្រូវទេ។';
+                } else {
+                    userFriendlyMessage += ` Server បានឆ្លើយតបថា: ${serverMessage}`;
+                }
+                throw new Error(userFriendlyMessage);
             }
-            
+
         } catch(error) {
             console.error("Error sending message:", error);
-            alert((error as Error).message);
+            
+            let alertMessage;
+            if (error instanceof Error) {
+                alertMessage = error.message;
+            } else if (typeof error === 'string') {
+                alertMessage = error;
+            } else {
+                try {
+                    alertMessage = JSON.stringify(error);
+                } catch {
+                    alertMessage = String(error);
+                }
+            }
+            
+            if (alertMessage && alertMessage.toLowerCase().includes('[object object]')) {
+                 alertMessage = 'An unexpected error occurred. Please check the developer console for more details.';
+            }
+
+            alert(alertMessage || 'An unknown error occurred.');
+            
             if (type === 'text') {
                 setNewMessage(originalMessage);
             }
@@ -216,9 +272,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 const errData = await response.json().catch(() => ({ message: 'Server responded with an error.' }));
                 throw new Error(errData.message || 'Failed to delete the message.');
             }
-            // Optimistic update: remove the message from local state immediately.
-            // The websocket broadcast will handle updates for other users.
-            setMessages(prev => prev.filter(msg => msg.id !== messageId));
+            // The websocket broadcast for delete will handle UI updates for all clients.
         } catch (error) {
             console.error("Error deleting message:", error);
             alert(`Could not delete message: ${(error as Error).message}`);
