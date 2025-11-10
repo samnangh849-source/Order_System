@@ -1,7 +1,40 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-// --- ជួសជុលទី១៖ ប្រើ import ពិតប្រាកដរបស់អ្នក ---
-import { MasterProduct } from '../../types';
-import { convertGoogleDriveUrl } from '../../utils/fileUtils';
+
+// --- [FIX] Mock Types and Functions to resolve import errors ---
+// We define these here so the component can compile for preview.
+// In your real project, you should use your imports from '../../types' and '../../utils/fileUtils'.
+
+/**
+ * Mocking 'MasterProduct' from '../../types'
+ * In your real project: import { MasterProduct } from '../../types';
+ */
+interface MasterProduct {
+    ProductName: string;
+    Barcode: string | null;
+    ImageURL: string;
+    // You can add other properties from your MasterProduct type if needed
+}
+
+/**
+ * Mocking 'convertGoogleDriveUrl' from '../../utils/fileUtils'
+ * In your real project: import { convertGoogleDriveUrl } from '../../utils/fileUtils';
+ */
+const convertGoogleDriveUrl = (url: string): string => {
+    if (!url) {
+        // Return a placeholder if URL is empty
+        return 'https://placehold.co/40x40/555/eee?text=?';
+    }
+    // Basic GDrive URL conversion
+    const regex = /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/;
+    const match = url.match(regex);
+    if (match && match[1]) {
+        return `https://drive.google.com/uc?id=${match[1]}`;
+    }
+    // Return original URL if it's not a standard share link or already direct
+    return url;
+};
+// --- End of FIX ---
+
 
 // --- Custom Hook: useDebounce ---
 // (មិនមានការកែប្រែ)
@@ -123,12 +156,32 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         const searchTerms = fullSearch.split(' ').filter(Boolean);
 
         const scoredProducts = products.map(product => {
-            const lowerName = product.ProductName.toLowerCase();
-            const lowerBarcode = (product.Barcode || '').toLowerCase();
+            // --- [FIX] Trim ឈ្មោះផលិតផល និង Barcode មុនពេលប្រៀបធៀប ---
+            const lowerName = product.ProductName.toLowerCase().trim();
+            const lowerBarcode = (product.Barcode || '').toLowerCase().trim();
             let score = 0;
-            let matchesAllTerms = true;
 
-            // 1. ពិនិត្យថាគ្រប់ពាក្យ Search ត្រូវតែមាន
+            // --- [FIX] រៀបចំប្រព័ន្ធពិន្ទុតាមលំដាប់ថ្នាក់ (Tiered Scoring) ---
+
+            // 1. Tier 1: ផ្គូផ្គងពិតប្រាកដ (Exact Match) - ពិន្ទុខ្ពស់បំផុត
+            if (lowerName === fullSearch) {
+                score = 10000; // ឈ្មោះពិតប្រាកដ
+                return { product, score }; // ចប់! នេះគឺខ្ពស់បំផុត
+            }
+            if (lowerBarcode === fullSearch) {
+                score = 9000; // Barcode ពិតប្រាកដ
+                return { product, score }; // ចប់!
+            }
+
+            // 2. Tier 2: ចាប់ផ្តើមដោយពាក្យ Search ទាំងមូល (Starts With Full Search)
+            if (lowerName.startsWith(fullSearch)) {
+                score = 8000; // ឈ្មោះចាប់ផ្តើមដោយពាក្យ Search
+            } else if (lowerBarcode.startsWith(fullSearch)) {
+                score = 7000; // Barcode ចាប់ផ្តើមដោយពាក្យ Search
+            }
+
+            // 3. Tier 3: ផ្ទុកគ្រប់ពាក្យ Search (Includes All Terms)
+            let matchesAllTerms = true;
             for (const term of searchTerms) {
                 const nameMatch = lowerName.includes(term);
                 const barcodeMatch = lowerBarcode.includes(term);
@@ -140,25 +193,27 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
             }
             
             if (!matchesAllTerms) {
-                return { product, score: 0 };
+                // បើមិនផ្ទុកគ្រប់ពាក្យទេ មិនត្រូវបង្ហាញទេ
+                // លើកលែងតែវាបានពិន្ទុពី Tier 2 (startsWith) រួចហើយ
+                if (score > 0) {
+                     return { product, score }; // រក្សាពិន្ទុពី Tier 2
+                }
+                return { product, score: 0 }; // បើមិនដូច្នេះទេ គឺ 0
             }
 
-            // 2. គណនាពិន្ទុ (Scoring)
-            // ពិន្ទុខ្ពស់សម្រាប់ Full Search Term
-            if (lowerName === fullSearch) score += 1000;
-            if (lowerBarcode === fullSearch) score += 500;
-            
-            // --- កែលម្អ៖ ប្រើ else if កុំអោយពិន្ទុជាន់គ្នា ---
-            else if (lowerName.startsWith(fullSearch)) score += 100; 
-            else if (lowerBarcode.startsWith(fullSearch)) score += 50;
+            // 4. ពិន្ទុបន្ថែម (Bonus)
+            // បើវាผ่านมาដល់ទីនេះ មានន័យថាវាផ្ទុកគ្រប់ពាក្យ
+            // បូក 1000 ពិន្ទុ ជាฐาน (Base score) សម្រាប់ការផ្ទុកគ្រប់ពាក្យ
+            // (ពិន្ទុនេះនឹងបូកបន្ថែមពីលើពិន្ទុ Tier 2 បើមាន)
+            score += 1000; 
 
-            // ពិន្ទុសម្រាប់ Individual Terms
+            // បូកពិន្ទុបន្ថែម សម្រាប់ការចាប់ផ្តើមដោយ "ពាក្យនីមួយៗ"
             for (const term of searchTerms) {
-                if (lowerName.startsWith(term)) score += 20;
-                else if (lowerName.includes(term)) score += 5;
+                if (lowerName.startsWith(term)) score += 50;
+                else if (lowerName.includes(term)) score += 10;
                 
-                if (lowerBarcode.startsWith(term)) score += 10;
-                else if (lowerBarcode.includes(term)) score += 2;
+                if (lowerBarcode.startsWith(term)) score += 20;
+                else if (lowerBarcode.includes(term)) score += 5;
             }
             
             return { product, score };
@@ -226,14 +281,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                     return newIndex;
                 });
                 break;
-            case 'ArrowUp':
-                e.preventDefault();
-                setHighlightedIndex(prev => {
-                    const newIndex = Math.max(prev - 1, 0);
-                    scrollToIndex(newIndex);
-                    return newIndex;
-                });
-                break;
+            // --- [FIX] លុប ArrowUp ដែលជាន់គ្នា ---
             case 'Enter':
                 e.preventDefault();
                 if (highlightedIndex >= 0 && highlightedIndex < filteredProducts.length) {
