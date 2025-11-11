@@ -21,8 +21,8 @@ interface MasterProduct {
  */
 const convertGoogleDriveUrl = (url: string): string => {
     if (!url) {
-        // Return a placeholder if URL is empty
-        return 'https://placehold.co/40x40/555/eee?text=?';
+        // --- [FIX] Return empty string to trigger onError handler ---
+        return '';
     }
     // Basic GDrive URL conversion
     const regex = /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/;
@@ -153,6 +153,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
             
         if (!fullSearch) return products; // បង្ហាញទាំងអស់បើមិន Search
 
+        // --- [FIX] កំណត់ 'searchTerms' ដែលបាត់ និងលុប '.filter(Boolean)' ដែលនៅខុសកន្លែង ---
         const searchTerms = fullSearch.split(' ').filter(Boolean);
 
         const scoredProducts = products.map(product => {
@@ -356,7 +357,14 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                                     src={convertGoogleDriveUrl(product.ImageURL)} 
                                     alt={product.ProductName} 
                                     className="w-8 h-8 object-cover rounded" 
-                                    // --- [FIX] បានដក onError ចេញ ត្រឡប់ទៅតាមគំរូ Code ដើមវិញ ---
+                                    // --- [FIX] បន្ថែម onError ជាមួយ SVG Icon ពណ៌ស ដូចក្នុងរូបគំរូ ---
+                                    onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.onerror = null; // ការពារកុំអោយ Loop
+                                        // រូប SVG Icon ពណ៌ស ដាក់ផ្ទៃខាងក្រោយប្រផេះ
+                                        target.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgZmlsbD0id2hpdGUiIHZpZXdCb3g9IjAgMCAyNTYgMjU2Ij48cGF0aCBkPSJNMjMyLDE4NFY3MmEzMiwzMiwwLDAsMC0zMi0zMkg1NkEzMiwzMiwwLDAsMCwyNCw3MlYxODRhMzIsMzIsMCwwLDAsMzIsMzJIMjAwQTMyLDMyLDAsMCwwLDIzMiwxODRaTTIwMCwyMDBINVZhMTYsMTYsMCwwLDEtMTYtMTZWNzJhMTYsMTYsMCwwLDEsMTYtMTZIMjAwYTE2LDE2LDAsMCwxLDE2LDE2VjE4NEExNiwxNiwwLDAsMSwyMDAsMjAwWm0tMzYuNTEtMjMuNEExNiwxNiwwLDAsMSwxNDQsMTY4bC0xMS4zMS0xMS4zMWE4LDgsMCwwLDAtMTEuMzIsMEw5NiwxODFsLTIwLjE0LTIwLjE0YTE2LDE2LDAsMCwxLC00LjY5LTIxLjExbC4xLS4xMUExNiwxNiwwLDAsMSw5Ni41MSwxMjguMTNsNjQsNjRhMTYsMTYsMCwwLDEsMCwyMi42MmwtNi4zLDYuMjlBOCw4LDAsMCwxLDE0NCwxOTJsMTkuMzEtMTkuMzFhOCw4LDAsMCwxLDExLjMyLDAsMS4yMSwxLjIxLDAsMCwxLDAsMS43TDExOC4zNCwxOTJhMTYsMTYsMCwwLDEtMjIuNjIsMGwtNjQtNjRhMTYsMTYsMCwwLDEsNS40LTc2LjA4bC4xLS4xMUExNiwxNiwwLDAsMSw2NCwxNDguNTRsNDAsNDBaIj48L3BhdGg+PC9zdmc+";
+                                        target.className = "w-8 h-8 rounded bg-gray-600 p-1"; // បន្ថែមផ្ទៃខាងក្រោយ និង padding
+                                    }}
                                 />
                                 <div className="truncate">
                                     <p className="font-semibold truncate">
