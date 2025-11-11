@@ -1060,7 +1060,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                                 onSelect={(productName) => handleProductUpdate(index, 'name', productName)}
                                             />
                                         </div>
-                                        <div className="col-span-4 sm:col-span-2">
+                                        <div className="col-span-5 sm:col-span-2">
                                             <label className="input-label text-center sm:text-left">ចំនួន*</label>
                                             <div className="quantity-stepper mx-auto sm:mx-0">
                                                 <button type="button" onClick={() => handleProductUpdate(index, 'quantity', Math.max(1, p.quantity - 1))} disabled={p.quantity <= 1}>-</button>
@@ -1068,7 +1068,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                                 <button type="button" onClick={() => handleProductUpdate(index, 'quantity', p.quantity + 1)}>+</button>
                                             </div>
                                         </div>
-                                        <div className="col-span-8 sm:col-span-3">
+                                        <div className="col-span-7 sm:col-span-3">
                                             <label className="input-label">ពណ៌/សម្គាល់</label>
                                             <input
                                                 type="text"
