@@ -1,5 +1,3 @@
-
-
 import React, { useState, useRef, useEffect, useMemo, useContext } from 'react';
 import { MasterProduct } from '../../types';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
@@ -97,7 +95,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     productName: productName,
-                    tags: newTags.join(','),
+                    newTags: newTags,
                 }),
             });
 
