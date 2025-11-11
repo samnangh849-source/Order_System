@@ -1,6 +1,6 @@
 
 
-import React, { useState, useContext, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useContext, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AppContext } from '../App';
 import { Product as ProductType, MasterProduct, ShippingMethod, Driver, BankAccount } from '../types';
 import Spinner from '../components/common/Spinner';
@@ -92,6 +92,241 @@ const MapModal: React.FC<{ isOpen: boolean; onClose: () => void; url: string; }>
     );
 };
 
+const BarcodeScannerModal = ({
+    onClose,
+    onCodeScanned,
+    scanMode,
+    setScanMode,
+    productsInOrder,
+    masterProducts,
+}: {
+    onClose: () => void;
+    onCodeScanned: (code: string) => void;
+    scanMode: 'single' | 'increment';
+    setScanMode: (mode: 'single' | 'increment') => void;
+    productsInOrder: ProductUIState[];
+    masterProducts: MasterProduct[];
+}) => {
+    const scannerRef = useRef<any>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [lastScannedInfo, setLastScannedInfo] = useState<string | null>(null);
+    const [isScannerInitializing, setIsScannerInitializing] = useState(true);
+    const [scannerError, setScannerError] = useState<string | null>(null);
+    const [zoom, setZoom] = useState(1);
+    const [zoomCapabilities, setZoomCapabilities] = useState<{ min: number; max: number; step: number } | null>(null);
+    const [isTorchOn, setIsTorchOn] = useState(false);
+    const [isTorchSupported, setIsTorchSupported] = useState(false);
+    const [scannedItemsCount, setScannedItemsCount] = useState(0);
+
+    const handleZoomChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const newZoom = parseFloat(e.target.value);
+        setZoom(newZoom);
+        if (scannerRef.current?.isScanning) {
+            scannerRef.current.applyVideoConstraints({ advanced: [{ zoom: newZoom }] })
+                .catch((err: any) => console.error("Failed to apply zoom", err));
+        }
+    }, []);
+    
+    const toggleTorch = useCallback(async () => {
+        if (scannerRef.current?.isScanning && isTorchSupported) {
+            const newTorchState = !isTorchOn;
+            try {
+                await scannerRef.current.applyVideoConstraints({
+                    advanced: [{ torch: newTorchState }],
+                });
+                setIsTorchOn(newTorchState);
+            } catch (err) {
+                console.error("Failed to toggle torch", err);
+                alert("Could not toggle flashlight.");
+            }
+        }
+    }, [isTorchOn, isTorchSupported]);
+
+
+    useEffect(() => {
+        const scanner = new window.Html5Qrcode("barcode-reader-container");
+        scannerRef.current = scanner;
+
+        let lastScanTime = 0;
+        const onScanSuccess = (decodedText: string, decodedResult: any) => {
+            const now = Date.now();
+            if (now - lastScanTime < 1000) return; // Debounce successful scans by 1 second
+            lastScanTime = now;
+            
+            const foundMasterProduct = masterProducts.find(
+                (p: MasterProduct) => p.Barcode && p.Barcode.trim() === decodedText.trim()
+            );
+
+            if (foundMasterProduct) {
+                const productInOrder = productsInOrder.find(p => p.name === foundMasterProduct.ProductName);
+                const currentQuantity = productInOrder ? productInOrder.quantity : 0;
+
+                if (scanMode === 'single' && productInOrder) {
+                    setLastScannedInfo(`⚠️ ${foundMasterProduct.ProductName} (មានរួចហើយ)`);
+                } else {
+                    const nextQuantity = scanMode === 'increment' ? currentQuantity + 1 : 1;
+                    setLastScannedInfo(`✅ ${foundMasterProduct.ProductName} (ចំនួន: ${nextQuantity})`);
+                    setScannedItemsCount(prev => prev + 1);
+                }
+            } else {
+                setLastScannedInfo(`❌ រកមិនឃើញ Barcode: ${decodedText}`);
+            }
+
+            onCodeScanned(decodedText);
+            
+            const canvas = canvasRef.current;
+            const video = document.querySelector<HTMLVideoElement>('#barcode-reader-container video');
+            if (canvas && video && decodedResult.result?.points) {
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+
+                canvas.width = video.clientWidth;
+                canvas.height = video.clientHeight;
+                const scaleX = video.clientWidth / video.videoWidth;
+                const scaleY = video.clientHeight / video.videoHeight;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.beginPath();
+                const points = decodedResult.result.points;
+                ctx.moveTo(points[0].x * scaleX, points[0].y * scaleY);
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i].x * scaleX, points[i].y * scaleY);
+                }
+                ctx.closePath();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#4ade80';
+                ctx.fillStyle = 'rgba(74, 222, 128, 0.3)';
+                ctx.stroke();
+                ctx.fill();
+
+                setTimeout(() => {
+                    setLastScannedInfo(null);
+                     if(canvasRef.current) {
+                       const currentCtx = canvasRef.current.getContext('2d');
+                       currentCtx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                    }
+                }, 1500);
+            }
+        };
+
+        const config = { fps: 10, qrbox: { width: 250, height: 250 }, supportedScanTypes: [] };
+        
+        scanner.start({ facingMode: "environment" }, config, onScanSuccess, (error: any) => {/* ignore */})
+            .then(() => {
+                const capabilities = scanner.getRunningTrackCapabilities();
+                if (capabilities) {
+                    const zoomCaps = capabilities.zoom;
+                    if (zoomCaps) {
+                        setZoomCapabilities({min: zoomCaps.min, max: zoomCaps.max, step: zoomCaps.step});
+                        setZoom(zoomCaps.min || 1);
+                    }
+                    if (capabilities.torch) {
+                        setIsTorchSupported(true);
+                    }
+                }
+                 setIsScannerInitializing(false);
+            })
+            .catch((err: any) => {
+                let errorMessage = "Could not start barcode scanner.";
+                if (err.name === 'NotAllowedError') {
+                    errorMessage = "Camera permission denied. Please allow camera access in your browser settings and refresh the page.";
+                } else if (err.name === 'NotFoundError') {
+                     errorMessage = "No back camera found on this device.";
+                }
+                console.error("Scanner start failed", err);
+                setScannerError(errorMessage);
+                setIsScannerInitializing(false);
+            });
+
+        return () => {
+            // Check if the scanner exists and is in the SCANNING state (state=2) before stopping.
+            if (scannerRef.current && typeof scannerRef.current.getState === 'function' && scannerRef.current.getState() === 2) {
+                scannerRef.current.stop().catch((err: any) => console.warn("Scanner failed to stop cleanly.", err));
+            }
+        };
+    }, [onCodeScanned, productsInOrder, masterProducts, scanMode]);
+
+    return (
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col p-2 sm:p-4 animate-fade-in">
+            <style>{`
+              #barcode-reader-container {
+                  width: 100%;
+                  height: 100%;
+                  overflow: hidden;
+              }
+              #barcode-reader-container video {
+                  width: 100% !important;
+                  height: 100% !important;
+                  object-fit: cover;
+              }
+            `}</style>
+            <div className="flex-shrink-0 flex justify-between items-center text-white mb-2 sm:mb-4">
+                <h2 className="text-lg sm:text-xl font-bold">
+                    Scan Barcode 
+                    <span className="text-gray-400 text-base font-normal ml-2">({scannedItemsCount} scanned)</span>
+                </h2>
+                <button onClick={onClose} className="p-2 bg-gray-700/50 rounded-full hover:bg-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            
+            <div className="flex-grow relative flex items-center justify-center min-h-0 w-full max-w-2xl mx-auto">
+                 <div id="barcode-reader-container" className="w-full h-full aspect-square bg-gray-900 rounded-lg overflow-hidden"></div>
+                 <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none z-10"></canvas>
+                 <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0 border-[20px] sm:border-[30px] border-black/50 box-border rounded-lg"></div>
+
+                {isScannerInitializing && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-white">
+                        <Spinner size="lg" />
+                        <p className="mt-4 font-semibold">Activating Camera...</p>
+                    </div>
+                )}
+                {scannerError && (
+                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-white p-4 text-center">
+                        <p className="font-semibold text-red-400">Camera Error</p>
+                        <p className="mt-2 text-sm">{scannerError}</p>
+                    </div>
+                )}
+                {lastScannedInfo && (
+                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-800/80 border border-gray-600 text-white px-4 py-2 rounded-lg font-semibold z-20">
+                        {lastScannedInfo}
+                    </div>
+                )}
+            </div>
+            
+            {!isScannerInitializing && !scannerError && (
+                 <div className="flex-shrink-0 mt-4 space-y-4 w-full max-w-2xl mx-auto">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-4 items-center">
+                        <div className="flex justify-center items-center space-x-2 bg-gray-800 p-1 rounded-lg">
+                            <button onClick={() => setScanMode('increment')} className={`flex-1 text-sm py-2 px-3 rounded-md transition-colors ${scanMode === 'increment' ? 'bg-blue-600 text-white' : 'hover:bg-gray-700'}`}>
+                                បូកចំនួន
+                            </button>
+                            <button onClick={() => setScanMode('single')} className={`flex-1 text-sm py-2 px-3 rounded-md transition-colors ${scanMode === 'single' ? 'bg-blue-600 text-white' : 'hover:bg-gray-700'}`}>
+                                រាប់មួយ
+                            </button>
+                        </div>
+                         <div className="flex justify-center">
+                            {isTorchSupported && (
+                                <button onClick={toggleTorch} className={`p-3 rounded-full transition-colors ${isTorchOn ? 'bg-yellow-400 text-gray-900' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.657a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 5.05A1 1 0 003.636 6.464l.707.707a1 1 0 001.414-1.414l-.707-.707zM4 10a1 1 0 01-1 1H2a1 1 0 110-2h1a1 1 0 011 1zM10 18a1 1 0 01-1-1v-1a1 1 0 112 0v1a1 1 0 01-1 1zM6.364 14.364a1 1 0 00-1.414 1.414l.707.707a1 1 0 001.414-1.414l-.707-.707zM14.364 14.364a1 1 0 001.414 1.414l.707.707a1 1 0 00-1.414-1.414l-.707-.707z" /></svg>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {zoomCapabilities && (
+                        <div className="flex items-center gap-2 sm:gap-4 bg-gray-800 p-2 rounded-lg">
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /><path fillRule="evenodd" d="M5 8a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
+                           <input type="range" min={zoomCapabilities.min} max={zoomCapabilities.max} step={zoomCapabilities.step} value={zoom} onChange={handleZoomChange} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"/>
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8zm3 1a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, onCancel }) => {
     const { appData, currentUser, previewImage, apiKey } = useContext(AppContext);
@@ -117,11 +352,10 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     const [driverPhoto, setDriverPhoto] = useState<string>('');
     const [bankLogo, setBankLogo] = useState<string>('');
     const [isScannerVisible, setIsScannerVisible] = useState(false);
-    const [scannedCode, setScannedCode] = useState<{ code: string; timestamp: number } | null>(null);
-    const scannerRef = useRef<any>(null);
     const [shippingFeeOption, setShippingFeeOption] = useState<'charge' | 'free'>('charge');
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
     const [mapSearchUrl, setMapSearchUrl] = useState('');
+    const [scanMode, setScanMode] = useState<'single' | 'increment'>('increment');
     
      const teamPages = useMemo(() => {
         if (!appData.pages) return [];
@@ -205,88 +439,63 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     }, [order.products, order.customer.shippingFee]);
 
     // --- Barcode Scanner Logic ---
-
-    useEffect(() => {
-        if (!scannedCode) return;
-
+    const handleCodeScanned = useCallback((scannedCode: string) => {
         const foundProduct: MasterProduct | undefined = appData.products.find(
-            (p: MasterProduct) => p.Barcode && p.Barcode.trim() === scannedCode.code.trim()
+            (p: MasterProduct) => p.Barcode && p.Barcode.trim() === scannedCode.trim()
         );
-        
-        const addOrUpdateProduct = (productData: MasterProduct) => {
-             setOrder((prevOrder: any) => {
-                const existingProductIndex = prevOrder.products.findIndex(
-                    (p: ProductType) => p.name === productData.ProductName
-                );
-
-                let updatedProducts;
-
-                if (existingProductIndex > -1) {
-                    const productToUpdate = { ...prevOrder.products[existingProductIndex] };
+    
+        if (!foundProduct) {
+            return;
+        }
+    
+        setOrder((prevOrder: any) => {
+            const existingProductIndex = prevOrder.products.findIndex(
+                (p: ProductType) => p.name === foundProduct.ProductName
+            );
+    
+            let updatedProducts;
+    
+            if (existingProductIndex > -1) {
+                // Product already in the order
+                const productToUpdate = { ...prevOrder.products[existingProductIndex] };
+    
+                if (scanMode === 'increment') {
                     productToUpdate.quantity += 1;
-                    const recalculated = calculateProductFields(productToUpdate, appData.products);
-                    updatedProducts = [...prevOrder.products];
-                    updatedProducts[existingProductIndex] = recalculated;
-
-                } else {
-                    const emptyProductIndex = prevOrder.products.findIndex((p: ProductType) => !p.name);
-                    
-                    const newProduct: ProductUIState = {
-                        ...initialProductState,
-                        id: Date.now(),
-                        name: productData.ProductName,
-                        quantity: 1,
-                        originalPrice: productData.Price,
-                        cost: productData.Cost,
-                        image: productData.ImageURL,
-                    };
-                    const recalculated = calculateProductFields(newProduct, appData.products);
-
-                    if (emptyProductIndex > -1) {
-                        updatedProducts = [...prevOrder.products];
-                        updatedProducts[emptyProductIndex] = recalculated;
-                    } else {
-                        updatedProducts = [...prevOrder.products, recalculated];
-                    }
                 }
-                return { ...prevOrder, products: updatedProducts };
-            });
-        };
-
-        if (foundProduct) {
-            addOrUpdateProduct(foundProduct);
-        } else {
-            alert(`រកមិនឃើញផលិតផលដែលមាន Barcode: ${scannedCode.code}`);
-        }
-    }, [scannedCode, appData.products]);
-
-    useEffect(() => {
-        if (isScannerVisible) {
-            const scanner = new window.Html5Qrcode("barcode-reader");
-            scannerRef.current = scanner;
-            
-            const onScanSuccess = (decodedText: string) => {
-                setScannedCode({ code: decodedText, timestamp: Date.now() });
-            };
-            const onScanFailure = (error: any) => { /* Ignore */ };
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-
-            scanner.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure)
-              .catch((err: any) => {
-                  console.error("Scanner start failed", err);
-                  alert("Could not start barcode scanner. Please ensure camera permissions are granted.");
-                  setIsScannerVisible(false);
-              });
-        }
-
-        return () => {
-            if (scannerRef.current && scannerRef.current.isScanning) {
-                scannerRef.current.stop()
-                    .catch((err: any) => console.error("Scanner stop failed", err));
+    
+                const recalculated = calculateProductFields(productToUpdate, appData.products);
+                updatedProducts = [...prevOrder.products];
+                updatedProducts[existingProductIndex] = recalculated;
+            } else {
+                // New product for the order
+                const emptyProductIndex = prevOrder.products.findIndex((p: ProductType) => !p.name);
+                const newProduct: ProductUIState = {
+                    ...initialProductState,
+                    id: Date.now(),
+                    name: foundProduct.ProductName,
+                    quantity: 1,
+                    originalPrice: foundProduct.Price,
+                    cost: foundProduct.Cost,
+                    image: foundProduct.ImageURL,
+                };
+                const recalculated = calculateProductFields(newProduct, appData.products);
+    
+                if (emptyProductIndex > -1) {
+                    updatedProducts = [...prevOrder.products];
+                    updatedProducts[emptyProductIndex] = recalculated;
+                } else {
+                    updatedProducts = [...prevOrder.products, recalculated];
+                }
             }
-        };
-    }, [isScannerVisible]);
-
+            
+            return { ...prevOrder, products: updatedProducts };
+        });
+    
+        if (scanMode === 'single') {
+            setIsScannerVisible(false);
+        }
+    }, [appData.products, scanMode]);
+    
     // --- End Barcode Scanner Logic ---
 
     const handleCustomerChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -963,19 +1172,16 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                         <div className="flex items-center space-x-4 mt-6">
                             <button type="button" onClick={addProduct} className="btn btn-secondary">បន្ថែមផលិតផល</button>
                             <button type="button" onClick={() => setIsScannerVisible(true)} className="btn btn-secondary flex items-center" disabled={isScannerVisible}>
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4h4m12 4V4h-4M4 16v4h4m12-4v4h-4M7 12h10" />
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                                    <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                                    <path d="M7 12h10" />
                                 </svg>
                                 Scan Barcode
                             </button>
                         </div>
-                         {isScannerVisible && (
-                            <div className="my-4 p-4 border border-dashed border-gray-500 rounded-lg">
-                                <h4 className="text-center font-semibold mb-2">ដាក់កាមេរ៉ាទៅលើបាកូដ</h4>
-                                <div id="barcode-reader" style={{ width: '100%', maxWidth: '500px', margin: 'auto' }}></div>
-                                <button type="button" onClick={() => setIsScannerVisible(false)} className="btn btn-secondary mt-4 w-full">បិទ Scanner</button>
-                            </div>
-                        )}
                     </fieldset>
                 );
             case 3:
@@ -1145,6 +1351,16 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                 onClose={() => setIsMapModalOpen(false)}
                 url={mapSearchUrl}
             />
+            {isScannerVisible && (
+                <BarcodeScannerModal
+                    onClose={() => setIsScannerVisible(false)}
+                    onCodeScanned={handleCodeScanned}
+                    scanMode={scanMode}
+                    setScanMode={setScanMode}
+                    productsInOrder={order.products}
+                    masterProducts={appData.products || []}
+                />
+            )}
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl md:text-3xl font-bold text-white">បង្កើតការកម្មង់ថ្មី (ក្រុម {team})</h1>
                 <button onClick={onCancel} className="btn btn-secondary">បោះបង់</button>
