@@ -1,4 +1,5 @@
 
+
 export interface User {
   UserName: string;
   Password?: string; // Should not be stored in client state long-term
@@ -16,6 +17,7 @@ export interface MasterProduct {
   Price: number;
   Cost: number;
   ImageURL: string;
+  Tags?: string; // NEW FIELD for comma-separated tags
 }
 
 // Represents a product item within an order being created

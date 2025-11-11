@@ -1,8 +1,11 @@
 
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useContext } from 'react';
 import { MasterProduct } from '../../types';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
+import { AppContext } from '../../App';
+import { WEB_APP_URL } from '../../constants';
+import Spinner from './Spinner';
 
 interface SearchableProductDropdownProps {
     products: MasterProduct[];
@@ -27,14 +30,27 @@ const highlightMatch = (text: string, query: string) => {
 };
 
 const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ products, selectedProductName, onSelect }) => {
+    const { refreshData } = useContext(AppContext);
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [inputValue, setInputValue] = useState(selectedProductName);
+    const [tags, setTags] = useState<string[]>([]);
+    const [tagInput, setTagInput] = useState('');
+    const [isSavingTags, setIsSavingTags] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+
+    const selectedProduct = useMemo(() => 
+        products.find(p => p.ProductName === selectedProductName), 
+    [products, selectedProductName]);
 
     useEffect(() => {
         setInputValue(selectedProductName);
-    }, [selectedProductName]);
+        if (selectedProduct && selectedProduct.Tags) {
+            setTags(selectedProduct.Tags.split(',').map(t => t.trim()).filter(Boolean));
+        } else {
+            setTags([]);
+        }
+    }, [selectedProductName, selectedProduct]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -57,7 +73,12 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         return products.filter(product => {
             const lowerProductName = product.ProductName.toLowerCase();
             const lowerBarcode = (product.Barcode || '').toLowerCase();
-            return searchTerms.every(term => lowerProductName.includes(term) || lowerBarcode.includes(term));
+            const lowerTags = (product.Tags || '').toLowerCase();
+            return searchTerms.every(term => 
+                lowerProductName.includes(term) || 
+                lowerBarcode.includes(term) ||
+                lowerTags.includes(term)
+            );
         }).sort((a, b) => a.ProductName.localeCompare(b.ProductName));
     }, [products, searchTerm]);
 
@@ -66,6 +87,63 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         const exactMatch = products.some(p => p.ProductName.trim().toLowerCase() === searchTerm.trim().toLowerCase());
         return !exactMatch;
     }, [searchTerm, products]);
+    
+    const updateTagsOnBackend = async (productName: string, newTags: string[]) => {
+        if (!productName) return;
+        setIsSavingTags(true);
+        try {
+            // NOTE: This assumes a backend endpoint exists to handle this update.
+            // The endpoint should find the product by its name (primary key) and update its 'Tags' column.
+            const response = await fetch(`${WEB_APP_URL}/api/admin/update-product-tags`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    productName: productName,
+                    tags: newTags.join(','),
+                }),
+            });
+
+            const result = await response.json();
+            if (!response.ok || result.status !== 'success') {
+                throw new Error(result.message || 'Failed to update tags.');
+            }
+            await refreshData();
+        } catch (error) {
+            console.error("Error updating tags:", error);
+            alert(`Could not save tags: ${(error as Error).message}`);
+            // Revert UI on failure
+            if (selectedProduct && selectedProduct.Tags) {
+                setTags(selectedProduct.Tags.split(',').map(t => t.trim()).filter(Boolean));
+            } else {
+                setTags([]);
+            }
+        } finally {
+            setIsSavingTags(false);
+        }
+    };
+
+    const handleAddTag = (tagToAdd: string) => {
+        const newTag = tagToAdd.trim().replace(/,/g, ''); // remove commas
+        if (newTag && !tags.includes(newTag)) {
+            const newTags = [...tags, newTag];
+            setTags(newTags);
+            updateTagsOnBackend(selectedProductName, newTags);
+        }
+        setTagInput('');
+    };
+
+    const handleRemoveTag = (tagToRemove: string) => {
+        const newTags = tags.filter(tag => tag !== tagToRemove);
+        setTags(newTags);
+        updateTagsOnBackend(selectedProductName, newTags);
+    };
+
+    const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            handleAddTag(tagInput);
+        }
+    };
 
     const handleSelect = (productName: string) => {
         onSelect(productName);
@@ -89,16 +167,14 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
     const handleInputBlur = () => {
         setTimeout(() => {
             if (isOpen) {
-                // If the user typed a new product name and tabbed/clicked away, select it.
                 if (showCustomAddOption && inputValue.trim()) {
                     handleSelect(inputValue.trim());
                 } else {
-                    // Otherwise, revert to the last valid selection.
                     setInputValue(selectedProductName);
                     setIsOpen(false);
                 }
             }
-        }, 200); // Delay to allow onMouseDown on list items to fire first
+        }, 200);
     };
     
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -124,6 +200,29 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                 onBlur={handleInputBlur}
                 onKeyDown={handleKeyDown}
             />
+            
+            {selectedProductName && (
+                <div className="mt-2 p-2 bg-gray-900/50 rounded-md">
+                    <div className="flex flex-wrap gap-2 items-center">
+                        {tags.map(tag => (
+                            <span key={tag} className="tag-badge">
+                                {tag}
+                                <button onClick={() => handleRemoveTag(tag)} className="ml-1 font-bold">&times;</button>
+                            </span>
+                        ))}
+                        <input 
+                            type="text"
+                            value={tagInput}
+                            onChange={e => setTagInput(e.target.value)}
+                            onKeyDown={handleTagInputKeyDown}
+                            placeholder="Add a tag..."
+                            className="tag-input"
+                            disabled={isSavingTags}
+                        />
+                         {isSavingTags && <Spinner size="sm"/>}
+                    </div>
+                </div>
+            )}
 
             {isOpen && (
                 <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 flex flex-col">
@@ -151,6 +250,11 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                                     <p className="text-xs text-gray-400 truncate">
                                         Barcode: {product.Barcode ? highlightMatch(product.Barcode, searchTerm) : 'N/A'} | តម្លៃ: ${product.Price.toFixed(2)}
                                     </p>
+                                    {product.Tags && (
+                                        <p className="text-xs text-blue-300 truncate mt-1">
+                                            Tags: {highlightMatch(product.Tags, searchTerm)}
+                                        </p>
+                                    )}
                                 </div>
                             </li>
                         ))}

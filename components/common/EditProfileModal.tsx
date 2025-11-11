@@ -13,12 +13,14 @@ interface EditProfileModalProps {
 const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
     const { currentUser, refreshData, updateCurrentUser } = useContext(AppContext);
     const [fullName, setFullName] = useState(currentUser?.FullName || '');
+    const [oldPassword, setOldPassword] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [profilePicUrl, setProfilePicUrl] = useState(currentUser?.ProfilePictureURL || '');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [isOldPasswordVisible, setIsOldPasswordVisible] = useState(false);
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);
     const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,65 +59,92 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        setLoading(true);
 
         if (!currentUser) {
             setError('No user logged in.');
+            setLoading(false);
             return;
         }
 
-        if (!fullName) {
-            setError('សូមបំពេញឈ្មោះពេញ។');
-            return;
+        const profileChanges: Partial<{ fullName: string, profilePictureURL: string }> = {};
+        if (fullName && fullName !== currentUser.FullName) {
+            profileChanges.fullName = fullName;
         }
+        if (profilePicUrl !== currentUser.ProfilePictureURL) {
+            profileChanges.profilePictureURL = profilePicUrl;
+        }
+        const hasProfileChanges = Object.keys(profileChanges).length > 0;
+        const hasPasswordIntent = password || confirmPassword || oldPassword;
 
-        if (password) {
+        if (hasPasswordIntent) {
+            if (!oldPassword) {
+                setError('សូមបញ្ចូលពាក្យសម្ងាត់បច្ចុប្បន្នរបស់អ្នក។');
+                setLoading(false);
+                return;
+            }
+            if (!password) {
+                setError('សូមបញ្ចូលពាក្យសម្ងាត់ថ្មី។');
+                setLoading(false);
+                return;
+            }
             if (password.length < 6) {
-                setError('ពាក្យសម្ងាត់ត្រូវមានយ៉ាងតិច ៦ តួអក្សរ។');
+                setError('ពាក្យសម្ងាត់ថ្មីត្រូវមានយ៉ាងតិច ៦ តួអក្សរ។');
+                setLoading(false);
                 return;
             }
             if (password !== confirmPassword) {
-                setError('ពាក្យសម្ងាត់ និងការបញ្ជាក់ពាក្យសម្ងាត់មិនตรงគ្នាទេ។');
+                setError('ពាក្យសម្ងាត់ថ្មី និងការបញ្ជាក់មិនตรงគ្នាទេ។');
+                setLoading(false);
                 return;
             }
         }
-        
-        setLoading(true);
 
-        const payload: {
-            userName: string;
-            fullName: string;
-            profilePictureURL: string;
-            password?: string;
-        } = {
-            userName: currentUser.UserName,
-            fullName: fullName,
-            profilePictureURL: profilePicUrl,
-        };
-
-        if (password) {
-            payload.password = password;
+        if (!hasProfileChanges && !hasPasswordIntent) {
+            setError("No changes detected.");
+            setLoading(false);
+            setTimeout(() => setError(''), 3000);
+            return;
         }
 
         try {
-            const response = await fetch(`${WEB_APP_URL}/api/profile/update`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            const result = await response.json();
-
-            if (!response.ok || result.status !== 'success') {
-                throw new Error(result.message || 'Failed to update profile.');
+            if (hasProfileChanges) {
+                const profilePayload = {
+                    userName: currentUser.UserName,
+                    ...profileChanges
+                };
+                const profileResponse = await fetch(`${WEB_APP_URL}/api/profile/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(profilePayload)
+                });
+                const profileResult = await profileResponse.json();
+                if (!profileResponse.ok || profileResult.status !== 'success') {
+                    throw new Error(profileResult.message || 'Failed to update profile info.');
+                }
+                updateCurrentUser({
+                    FullName: fullName,
+                    ProfilePictureURL: profilePicUrl,
+                });
             }
 
-            // Optimistically update the current user for instant UI feedback
-            updateCurrentUser({
-                FullName: fullName,
-                ProfilePictureURL: profilePicUrl,
-            });
-
-            // Refresh all data from server for consistency
+            if (hasPasswordIntent) {
+                const passwordPayload = {
+                    userName: currentUser.UserName,
+                    oldPassword: oldPassword,
+                    newPassword: password,
+                };
+                const passwordResponse = await fetch(`${WEB_APP_URL}/api/profile/change-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(passwordPayload)
+                });
+                const passwordResult = await passwordResponse.json();
+                if (!passwordResponse.ok || passwordResult.status !== 'success') {
+                    throw new Error(passwordResult.message || 'Failed to change password.');
+                }
+            }
+            
             await refreshData();
             onClose();
 
@@ -172,32 +201,50 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) => {
                         </div>
                     </div>
                 </div>
-                <div>
-                    <label htmlFor="edit-password" className="block text-sm font-medium text-gray-400 mb-2">ពាក្យសម្ងាត់ថ្មី (ទុកឱ្យនៅទំនេរប្រសិនបើមិនចង់ប្តូរ)</label>
-                    <div className="relative">
-                        <input type={isPasswordVisible ? "text" : "password"} id="edit-password" value={password} onChange={(e) => setPassword(e.target.value)} className="form-input pr-10" />
-                         <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white">
-                            {isPasswordVisible ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67 .126 2.454 .364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
-                            ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                            )}
-                        </button>
+
+                <div className="border-t border-gray-700 pt-4 space-y-4">
+                     <p className="text-sm text-gray-400">បំពេញផ្នែកខាងក្រោមដើម្បីផ្លាស់ប្តូរពាក្យសម្ងាត់របស់អ្នក។</p>
+                     <div>
+                        <label htmlFor="edit-old-password" className="block text-sm font-medium text-gray-400 mb-2">ពាក្យសម្ងាត់បច្ចុប្បន្ន</label>
+                        <div className="relative">
+                            <input type={isOldPasswordVisible ? "text" : "password"} id="edit-old-password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="form-input pr-10" />
+                             <button type="button" onClick={() => setIsOldPasswordVisible(!isOldPasswordVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white">
+                                {isOldPasswordVisible ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67 .126 2.454 .364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label htmlFor="edit-password" className="block text-sm font-medium text-gray-400 mb-2">ពាក្យសម្ងាត់ថ្មី</label>
+                        <div className="relative">
+                            <input type={isPasswordVisible ? "text" : "password"} id="edit-password" value={password} onChange={(e) => setPassword(e.target.value)} className="form-input pr-10" />
+                             <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white">
+                                {isPasswordVisible ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67 .126 2.454 .364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                     <div>
+                        <label htmlFor="edit-confirm-password" className="block text-sm font-medium text-gray-400 mb-2">បញ្ជាក់ពាក្យសម្ងាត់ថ្មី</label>
+                        <div className="relative">
+                            <input type={isConfirmPasswordVisible ? "text" : "password"} id="edit-confirm-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="form-input pr-10" />
+                            <button type="button" onClick={() => setIsConfirmPasswordVisible(!isConfirmPasswordVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white">
+                                {isConfirmPasswordVisible ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67 .126 2.454 .364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
-                 <div>
-                    <label htmlFor="edit-confirm-password" className="block text-sm font-medium text-gray-400 mb-2">បញ្ជាក់ពាក្យសម្ងាត់ថ្មី</label>
-                    <div className="relative">
-                        <input type={isConfirmPasswordVisible ? "text" : "password"} id="edit-confirm-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="form-input pr-10" />
-                        <button type="button" onClick={() => setIsConfirmPasswordVisible(!isConfirmPasswordVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white">
-                            {isConfirmPasswordVisible ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67 .126 2.454 .364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
-                            ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                            )}
-                        </button>
-                    </div>
-                </div>
+
                 {error && <p className="text-red-400 mt-2 h-5">{error}</p>}
                 <div className="flex justify-end pt-4 space-x-4">
                     <button type="button" onClick={onClose} className="btn btn-secondary">បោះបង់</button>
