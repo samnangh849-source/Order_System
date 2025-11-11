@@ -1061,8 +1061,12 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                             />
                                         </div>
                                         <div className="col-span-4 sm:col-span-2">
-                                            <label className="input-label">ចំនួន*</label>
-                                            <input type="number" min="1" value={p.quantity} onChange={(e) => handleProductUpdate(index, 'quantity', Number(e.target.value))} className="form-input text-center" />
+                                            <label className="input-label text-center sm:text-left">ចំនួន*</label>
+                                            <div className="quantity-stepper mx-auto sm:mx-0">
+                                                <button type="button" onClick={() => handleProductUpdate(index, 'quantity', Math.max(1, p.quantity - 1))} disabled={p.quantity <= 1}>-</button>
+                                                <span className="quantity-display">{p.quantity}</span>
+                                                <button type="button" onClick={() => handleProductUpdate(index, 'quantity', p.quantity + 1)}>+</button>
+                                            </div>
                                         </div>
                                         <div className="col-span-8 sm:col-span-3">
                                             <label className="input-label">ពណ៌/សម្គាល់</label>
@@ -1161,9 +1165,9 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                             <span className="text-gray-400">តម្លៃចុងក្រោយ (ឯកតា): </span>
                                             <span className="font-semibold">${p.finalPrice.toFixed(2)}</span>
                                         </div>
-                                        <div className="text-right">
-                                             <span className="text-gray-400 text-sm">សរុប</span>
-                                             <p className="font-bold text-xl text-blue-300">${p.total.toFixed(2)}</p>
+                                        <div className="flex items-baseline justify-end gap-2">
+                                            <span className="text-gray-400 text-sm">សរុប</span>
+                                            <span className="font-bold text-xl text-blue-300">${p.total.toFixed(2)}</span>
                                         </div>
                                     </div>
                                 </div>
