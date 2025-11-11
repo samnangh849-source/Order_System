@@ -1,4 +1,5 @@
 
+
 import React, { useState, useContext, useEffect, useMemo, useRef } from 'react';
 import { AppContext } from '../App';
 import { Product as ProductType, MasterProduct, ShippingMethod, Driver, BankAccount } from '../types';
@@ -19,6 +20,7 @@ interface ProductUIState extends ProductType {
     discountType: 'percent' | 'amount' | 'custom';
     discountAmountInput: string; // Value from the amount input field, stored as string for better UX
     discountPercentInput: string; // Value from the percent input field, stored as string for better UX
+    finalPriceInput: string;
     applyDiscountToTotal: boolean;
 }
 
@@ -38,6 +40,7 @@ const initialProductState: ProductUIState = {
     discountType: 'percent',
     discountAmountInput: '',
     discountPercentInput: '',
+    finalPriceInput: '',
     applyDiscountToTotal: false,
 };
 
@@ -350,15 +353,10 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
         const updated = { ...product };
         const masterProduct = allMasterProducts.find(p => p.ProductName === updated.name);
     
-        if (!masterProduct) {
-            updated.total = (Number(updated.quantity) || 0) * (Number(updated.finalPrice) || 0);
-            return updated;
-        }
-    
         // Ensure types are correct
         updated.quantity = Number(updated.quantity) || 1;
-        updated.originalPrice = Number(masterProduct.Price) || 0;
-        updated.cost = Number(masterProduct.Cost) || 0;
+        updated.originalPrice = masterProduct ? (Number(masterProduct.Price) || 0) : 0;
+        updated.cost = masterProduct ? (Number(masterProduct.Cost) || 0) : 0;
     
         const originalTotal = updated.quantity * updated.originalPrice;
         let finalTotal = originalTotal;
@@ -382,16 +380,21 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                 break;
     
             case 'custom':
-                const customFinalPrice = Number(updated.finalPrice) || 0;
+                const customFinalPrice = Number(updated.finalPriceInput) || 0;
                 finalTotal = updated.quantity * customFinalPrice;
                 totalDiscountAmount = originalTotal - finalTotal;
-                updated.finalPrice = customFinalPrice; // ensure it's a number
+                updated.finalPrice = customFinalPrice;
                 break;
         }
     
         updated.total = finalTotal;
         updated.finalPrice = updated.quantity > 0 ? finalTotal / updated.quantity : 0;
         updated.discountPercent = originalTotal > 0 ? (totalDiscountAmount / originalTotal) * 100 : 0;
+
+        // Sync finalPriceInput if it wasn't the source of truth
+        if (updated.discountType !== 'custom') {
+            updated.finalPriceInput = updated.finalPrice.toFixed(2);
+        }
     
         return updated;
     };
@@ -401,10 +404,15 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
             const updatedProducts = [...prev.products];
             let productToUpdate = { ...updatedProducts[index] };
             
-            const numericFieldsToSanitize: (keyof ProductUIState)[] = ['discountPercentInput', 'discountAmountInput', 'finalPrice'];
-            if (numericFieldsToSanitize.includes(field)) {
+            const numericStringFields: (keyof ProductUIState)[] = ['discountPercentInput', 'discountAmountInput', 'finalPriceInput'];
+            if (numericStringFields.includes(field)) {
                 let stringValue = String(value);
-                 if (stringValue.startsWith('0') && stringValue.length > 1 && !stringValue.startsWith('0.')) {
+
+                // Sanitize: allow only numbers and a single decimal point
+                stringValue = stringValue.replace(/[^0-9.]/g, '').replace(/(\..*?)\./g, '$1');
+
+                // Sanitize: remove leading zeros on integers (e.g., "05" -> "5"), but allow "0.5"
+                if (stringValue.startsWith('0') && stringValue.length > 1 && !stringValue.startsWith('0.')) {
                     stringValue = String(parseFloat(stringValue));
                 }
                 // @ts-ignore
@@ -414,25 +422,39 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                 productToUpdate[field] = value;
             }
     
-            // When product name changes, reset everything based on master product data
             if (field === 'name') {
                 const masterProduct = appData.products.find((p: MasterProduct) => p.ProductName === value);
+                
+                productToUpdate.name = value;
+    
                 if (masterProduct) {
+                    // It's an existing product
                     productToUpdate.originalPrice = masterProduct.Price;
                     productToUpdate.image = masterProduct.ImageURL;
                     productToUpdate.cost = masterProduct.Cost;
-                    // Reset discounts
                     productToUpdate.discountType = 'percent';
+                    productToUpdate.discountPercentInput = '';
+                    productToUpdate.discountAmountInput = '';
+                    productToUpdate.finalPrice = masterProduct.Price;
+                    productToUpdate.finalPriceInput = String(masterProduct.Price);
+                } else {
+                    // This is a new, custom product
+                    productToUpdate.originalPrice = 0;
+                    productToUpdate.image = '';
+                    productToUpdate.cost = 0;
+                    productToUpdate.discountType = 'custom'; 
+                    productToUpdate.finalPrice = 0;
+                    productToUpdate.finalPriceInput = '';
                     productToUpdate.discountPercentInput = '';
                     productToUpdate.discountAmountInput = '';
                 }
             }
              
-            // Reset inputs when switching discount type
             if (field === 'discountType') {
                 productToUpdate.discountPercentInput = '';
                 productToUpdate.discountAmountInput = '';
                 productToUpdate.finalPrice = productToUpdate.originalPrice;
+                productToUpdate.finalPriceInput = String(productToUpdate.originalPrice);
             }
     
             const recalculatedProduct = calculateProductFields(productToUpdate, appData.products);
@@ -835,7 +857,16 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                         </div>
                                         <div className="col-span-8 sm:col-span-3">
                                             <label className="input-label">ពណ៌/សម្គាល់</label>
-                                            <input type="text" placeholder="e.g. Red, Size 42" value={p.colorInfo} onChange={(e) => handleProductUpdate(index, 'colorInfo', e.target.value)} className="form-input" />
+                                            <select
+                                                value={p.colorInfo}
+                                                onChange={(e) => handleProductUpdate(index, 'colorInfo', e.target.value)}
+                                                className="form-select"
+                                            >
+                                                <option value="">-- ជ្រើសរើស --</option>
+                                                {(appData.colors || []).map((color: { ColorName: string }, colorIndex: number) => (
+                                                    <option key={colorIndex} value={color.ColorName}>{color.ColorName}</option>
+                                                ))}
+                                            </select>
                                         </div>
                                     </div>
                                     
@@ -891,7 +922,14 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                             )}
                                             {p.discountType === 'custom' && (
                                                  <div className="relative">
-                                                     <input type="number" placeholder="Final Price (per item)" value={p.finalPrice} onChange={e => handleProductUpdate(index, 'finalPrice', e.target.value)} className="form-input"/>
+                                                     <input 
+                                                        type="text"
+                                                        inputMode="decimal"
+                                                        placeholder="Final Price (per item)" 
+                                                        value={p.finalPriceInput} 
+                                                        onChange={e => handleProductUpdate(index, 'finalPriceInput', e.target.value)} 
+                                                        className="form-input"
+                                                     />
                                                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
                                                  </div>
                                             )}
