@@ -92,8 +92,6 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         if (!productName) return;
         setIsSavingTags(true);
         try {
-            // NOTE: This assumes a backend endpoint exists to handle this update.
-            // The endpoint should find the product by its name (primary key) and update its 'Tags' column.
             const response = await fetch(`${WEB_APP_URL}/api/admin/update-product-tags`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -103,11 +101,23 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                 }),
             });
 
-            const result = await response.json();
-            if (!response.ok || result.status !== 'success') {
-                throw new Error(result.message || 'Failed to update tags.');
+            if (!response.ok) {
+                let errorMessage = 'Failed to update tags.';
+                try {
+                    // Try to parse a JSON error from the backend
+                    const errorResult = await response.json();
+                    errorMessage = errorResult.message || JSON.stringify(errorResult);
+                } catch (e) {
+                    // If parsing fails, it's likely a plain text error
+                    errorMessage = `Server Error: ${await response.text()}`;
+                }
+                throw new Error(errorMessage);
             }
+            
+            // On success, we don't need to parse the body if it's just "ok".
+            // The `response.ok` check is sufficient.
             await refreshData();
+
         } catch (error) {
             console.error("Error updating tags:", error);
             alert(`Could not save tags: ${(error as Error).message}`);
@@ -165,6 +175,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
     };
 
     const handleInputBlur = () => {
+        // Delay to allow click events on dropdown to register
         setTimeout(() => {
             if (isOpen) {
                 if (showCustomAddOption && inputValue.trim()) {
