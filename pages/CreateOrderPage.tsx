@@ -857,16 +857,19 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                         </div>
                                         <div className="col-span-8 sm:col-span-3">
                                             <label className="input-label">ពណ៌/សម្គាល់</label>
-                                            <select
+                                            <input
+                                                type="text"
+                                                list={`colors-datalist-${p.id}`}
                                                 value={p.colorInfo}
                                                 onChange={(e) => handleProductUpdate(index, 'colorInfo', e.target.value)}
-                                                className="form-select"
-                                            >
-                                                <option value="">-- ជ្រើសរើស --</option>
+                                                className="form-input"
+                                                placeholder="ជ្រើសរើស ឬ បញ្ចូលថ្មី..."
+                                            />
+                                            <datalist id={`colors-datalist-${p.id}`}>
                                                 {(appData.colors || []).map((color: { ColorName: string }, colorIndex: number) => (
-                                                    <option key={colorIndex} value={color.ColorName}>{color.ColorName}</option>
+                                                    <option key={colorIndex} value={color.ColorName} />
                                                 ))}
-                                            </select>
+                                            </datalist>
                                         </div>
                                     </div>
                                     
