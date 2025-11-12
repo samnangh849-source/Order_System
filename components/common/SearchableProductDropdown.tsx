@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect, useMemo, useContext } from 'react';
 import { MasterProduct } from '../../types';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
@@ -149,11 +150,9 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         updateTagsOnBackend(selectedProductName, newTags);
     };
 
-    const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' || e.key === ',') {
-            e.preventDefault();
-            handleAddTag(tagInput);
-        }
+    const handleTagSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        handleAddTag(tagInput);
     };
 
     const handleSelect = (productName: string) => {
@@ -215,24 +214,33 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
             
             {selectedProductName && (
                 <div className="mt-2 p-2 bg-gray-900/50 rounded-md">
-                    <div className="flex flex-wrap gap-2 items-center">
+                    <form onSubmit={handleTagSubmit} className="flex flex-wrap gap-2 items-center">
                         {tags.map(tag => (
                             <span key={tag} className="tag-badge">
                                 {tag}
-                                <button onClick={() => handleRemoveTag(tag)} className="ml-1 font-bold">&times;</button>
+                                <button type="button" onClick={() => handleRemoveTag(tag)} className="ml-1 font-bold">&times;</button>
                             </span>
                         ))}
                         <input 
                             type="text"
                             value={tagInput}
                             onChange={e => setTagInput(e.target.value)}
-                            onKeyDown={handleTagInputKeyDown}
                             placeholder="Add a tag..."
                             className="tag-input"
                             disabled={isSavingTags}
                         />
                          {isSavingTags && <Spinner size="sm"/>}
-                    </div>
+                         <button
+                            type="submit"
+                            className="btn btn-secondary !p-2 sm:hidden flex-shrink-0"
+                            disabled={isSavingTags || !tagInput.trim()}
+                            aria-label="Add tag"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 15l-3-3m0 0l3-3m-3 3h12a6 6 0 000-12h-3" />
+                            </svg>
+                        </button>
+                    </form>
                 </div>
             )}
 

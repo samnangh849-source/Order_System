@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Spinner from '../common/Spinner';
 
 interface AudioPlayerProps {
@@ -6,10 +6,8 @@ interface AudioPlayerProps {
 }
 
 const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
-    const audioRef = useRef<HTMLAudioElement>(null);
+    const mediaRef = useRef<HTMLVideoElement>(null);
     const progressBarRef = useRef<HTMLDivElement>(null);
-    // FIX: Initialize useRef with null to satisfy TypeScript rule expecting one argument.
-    const animationRef = useRef<number | null>(null);
 
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
@@ -17,110 +15,117 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
     const [isReady, setIsReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const cleanup = useCallback(() => {
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.removeAttribute('src'); // Use removeAttribute
-            audioRef.current.load();
-        }
-        setIsPlaying(false);
-        setDuration(0);
-        setCurrentTime(0);
-        setIsReady(false);
-        setError(null);
-        if (animationRef.current) {
-            cancelAnimationFrame(animationRef.current);
-        }
-    }, []);
-
     useEffect(() => {
-        const audio = audioRef.current;
-        if (!audio || !src) {
-            cleanup();
-            return;
-        }
+        const media = mediaRef.current;
+        if (!media) return;
 
-        const onLoadedMetadata = () => {
-            if (isFinite(audio.duration)) {
-                setDuration(audio.duration);
+        // --- Event Handlers ---
+        const onReady = () => {
+            if (media.duration && isFinite(media.duration)) {
+                setDuration(media.duration);
                 setIsReady(true);
                 setError(null);
             }
         };
 
+        const onTimeUpdate = () => {
+            setCurrentTime(media.currentTime);
+        };
+        
         const onEnded = () => {
             setIsPlaying(false);
             setCurrentTime(0);
         };
-        
+
         const onError = () => {
-            console.error(`Audio error: ${audio.error?.code}; ${audio.error?.message}`);
-            setError('Could not play audio.');
+            const err = media.error;
+            console.error(`Media Error: Code ${err?.code}, Message: ${err?.message}`);
+            let errorMessage = 'Could not play audio.';
+            if (err?.code === 4) { // MEDIA_ERR_SRC_NOT_SUPPORTED
+                 errorMessage = 'Audio format not supported or source unavailable.';
+            }
+            setError(errorMessage);
             setIsReady(false);
         };
         
-        // Set up listeners before setting src
-        audio.addEventListener('loadedmetadata', onLoadedMetadata);
-        audio.addEventListener('ended', onEnded);
-        audio.addEventListener('error', onError);
-
-        // Set the source and load it
-        audio.src = src;
-        audio.load();
-
-        return () => {
-            // Cleanup: remove event listeners
-            audio.removeEventListener('loadedmetadata', onLoadedMetadata);
-            audio.removeEventListener('ended', onEnded);
-            audio.removeEventListener('error', onError);
-            cleanup();
+        const onStalled = () => {
+            console.warn("Media playback stalled due to insufficient data.");
         };
-    }, [src, cleanup]);
 
+        // --- Attach Listeners ---
+        media.addEventListener('canplay', onReady);
+        media.addEventListener('timeupdate', onTimeUpdate);
+        media.addEventListener('ended', onEnded);
+        media.addEventListener('error', onError);
+        media.addEventListener('stalled', onStalled);
 
-    const whilePlaying = useCallback(() => {
-        if (audioRef.current?.paused === false) {
-             setCurrentTime(audioRef.current.currentTime);
-             animationRef.current = requestAnimationFrame(whilePlaying);
-        } else {
-             if(animationRef.current) cancelAnimationFrame(animationRef.current);
+        // --- Source Loading Logic ---
+        // This consolidated check is the key fix. It prevents reloading the audio if the component 
+        // re-renders but the src prop is the same as what the media element already has.
+        if (media.src !== src) {
+            // Reset all state for the new source. This shows the loading spinner.
+            setIsPlaying(false);
+            setIsReady(false);
+            setError(null);
+            setDuration(0);
+            setCurrentTime(0);
+
+            if (src) {
+                media.src = src;
+                media.load();
+            } else {
+                // Handle src being explicitly removed
+                media.pause();
+                media.removeAttribute('src');
+                media.src = '';
+                media.load();
+            }
         }
-    }, []);
+
+        // --- Cleanup on unmount or when src changes ---
+        return () => {
+            media.removeEventListener('canplay', onReady);
+            media.removeEventListener('timeupdate', onTimeUpdate);
+            media.removeEventListener('ended', onEnded);
+            media.removeEventListener('error', onError);
+            media.removeEventListener('stalled', onStalled);
+        };
+    }, [src]);
 
     const togglePlayPause = () => {
         if (!isReady || error) return;
-        
-        const audio = audioRef.current;
-        if (!audio) return;
-        
+        const media = mediaRef.current;
+        if (!media) return;
+
         if (isPlaying) {
-            audio.pause();
+            media.pause();
             setIsPlaying(false);
-            if(animationRef.current) cancelAnimationFrame(animationRef.current);
         } else {
-            audio.play().then(() => {
-                setIsPlaying(true);
-                animationRef.current = requestAnimationFrame(whilePlaying);
-            }).catch(e => {
-                console.error("Playback failed:", e);
-                setError("Playback failed.");
-                setIsPlaying(false);
-            });
+            setIsPlaying(true); // Optimistic update
+            const playPromise = media.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(err => {
+                    // Ignore AbortError, which is expected on component unmount
+                    if (err.name !== 'AbortError') {
+                        console.error('Playback failed:', err);
+                        setError("Playback failed.");
+                        setIsPlaying(false); // Revert state on actual error
+                    }
+                });
+            }
         }
     };
 
     const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        const audio = audioRef.current;
+        const media = mediaRef.current;
         const progressBar = progressBarRef.current;
-        if (!isReady || !audio || !progressBar) return;
+        if (!isReady || !media || !progressBar) return;
         
         const rect = progressBar.getBoundingClientRect();
         const clickX = e.clientX - rect.left;
         const percentage = Math.min(Math.max(clickX / progressBar.offsetWidth, 0), 1);
-        const newTime = percentage * duration;
-        
-        audio.currentTime = newTime;
-        setCurrentTime(newTime);
+        media.currentTime = percentage * duration;
+        setCurrentTime(media.currentTime); // Update state immediately for better UX
     };
 
     const formatTime = (timeInSeconds: number) => {
@@ -138,7 +143,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
     
     return (
         <div className="audio-player">
-            <audio ref={audioRef} preload="metadata" />
+            <video ref={mediaRef} preload="metadata" style={{ display: 'none' }} playsInline />
             <button onClick={togglePlayPause} className="play-pause-btn" aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isReady}>
                 {!isReady ? <Spinner size="sm"/> : 
                 isPlaying ? (
