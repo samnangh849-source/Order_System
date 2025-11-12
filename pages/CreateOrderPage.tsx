@@ -1402,7 +1402,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                     ))}
                 </div>
                 
-                <form onSubmit={(e) => e.preventDefault()} className="space-y-8 mt-8">
+                <div className="space-y-8 mt-8">
                     {renderStepContent()}
                     {error && <p className="text-red-400 mt-4 text-center bg-red-900/30 p-3 rounded-md">{error}</p>}
                     <div className="flex justify-between pt-4 border-t border-gray-700">
@@ -1417,7 +1417,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                             </button>
                         )}
                     </div>
-                </form>
+                </div>
             </div>
         </div>
     );
