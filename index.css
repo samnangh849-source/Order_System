@@ -1043,32 +1043,48 @@ body {
     justify-content: center;
 }
 
-/* NEW: Tag input styles in SearchableProductDropdown */
+/* === UPDATED: Tag input styles === */
+.tags-input-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    cursor: text;
+}
+.tags-input-container:focus-within {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+}
 .tag-badge {
     display: inline-flex;
     align-items: center;
-    background-color: #3b82f6;
-    color: white;
-    padding: 0.25rem 0.6rem;
-    border-radius: 9999px;
-    font-size: 0.8rem;
+    background-color: #374151;
+    color: #d1d5db;
+    padding: 0.2rem 0.6rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
     font-weight: 500;
 }
-
-.tag-badge button {
+.tag-remove-btn {
     background: none;
     border: none;
-    color: white;
-    opacity: 0.7;
+    color: #9ca3af;
     cursor: pointer;
     padding: 0;
     line-height: 1;
-    margin-left: 0.25rem;
+    margin-left: 0.4rem;
+    font-size: 1.2em;
+    transition: color 0.2s;
 }
-.tag-badge button:hover {
-    opacity: 1;
+.tag-remove-btn:hover {
+    color: #ef4444;
 }
-
 .tag-input {
     background: transparent;
     border: none;
@@ -1076,7 +1092,15 @@ body {
     color: #d1d5db;
     padding: 0.25rem;
     flex-grow: 1;
-    min-width: 80px;
+    min-width: 100px;
+    width: 100%;
+}
+.tag-input::placeholder {
+    color: #6b7280;
+}
+.tags-input-container form {
+    flex: 1 1 auto;
+    min-width: 100px;
 }
 
 /* UPDATED: Quantity Stepper Styles */
