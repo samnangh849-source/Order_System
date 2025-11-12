@@ -41,46 +41,51 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
 
 
     const handleDatePresetChange = (preset: DateRangePreset) => {
+        if (preset === 'custom') {
+            setFilters({ ...filters, datePreset: preset });
+            return;
+        }
+        if (preset === 'all') {
+            setFilters({ ...filters, datePreset: preset, startDate: '', endDate: '' });
+            return;
+        }
+
         const now = new Date();
-        let start = new Date(now);
-        let end = new Date(now);
+        let start = new Date();
+        let end = new Date();
 
         switch (preset) {
             case 'today':
-                start.setHours(0, 0, 0, 0);
-                end.setHours(23, 59, 59, 999);
+                // start and end are already today's date
                 break;
             case 'this_week':
-                const firstDay = now.getDate() - now.getDay();
-                start = new Date(now.setDate(firstDay));
-                start.setHours(0, 0, 0, 0);
-                end = new Date(now.setDate(start.getDate() + 6));
-                end.setHours(23, 59, 59, 999);
+                const dayOfWeek = now.getDay(); // 0 for Sunday
+                start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+                end = new Date(start);
+                end.setDate(start.getDate() + 6);
                 break;
             case 'this_month':
                 start = new Date(now.getFullYear(), now.getMonth(), 1);
                 end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-                start.setHours(0, 0, 0, 0);
-                end.setHours(23, 59, 59, 999);
                 break;
             case 'this_year':
                 start = new Date(now.getFullYear(), 0, 1);
                 end = new Date(now.getFullYear(), 11, 31);
-                start.setHours(0, 0, 0, 0);
-                end.setHours(23, 59, 59, 999);
                 break;
-            case 'all':
-                setFilters({ ...filters, datePreset: preset, startDate: '', endDate: '' });
-                return;
-            case 'custom':
-                 setFilters({...filters, datePreset: preset});
-                 return;
         }
+
+        const toLocalYYYYMMDD = (d: Date) => {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
         setFilters({
             ...filters,
             datePreset: preset,
-            startDate: start.toISOString().split('T')[0],
-            endDate: end.toISOString().split('T')[0]
+            startDate: toLocalYYYYMMDD(start),
+            endDate: toLocalYYYYMMDD(end)
         });
     };
     
@@ -91,12 +96,14 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
 
     const filteredOrders = useMemo(() => {
         return orders.filter(order => {
-            const orderDate = new Date(order.Timestamp);
-            const startDate = filters.startDate ? new Date(filters.startDate) : null;
-            const endDate = filters.endDate ? new Date(filters.endDate) : null;
-            if (startDate) startDate.setHours(0,0,0,0);
-            if (endDate) endDate.setHours(23,59,59,999);
+            // Correctly parse the filter dates as local time to avoid timezone issues.
+            // new Date('YYYY-MM-DD') is parsed as UTC midnight, which can cause orders on the start date to be excluded.
+            // Appending 'T00:00:00' makes the parser treat it as a local date.
+            const startDate = filters.startDate ? new Date(`${filters.startDate}T00:00:00`) : null;
+            const endDate = filters.endDate ? new Date(`${filters.endDate}T23:59:59`) : null;
 
+            const orderDate = new Date(order.Timestamp);
+            
             const dateMatch = (!startDate || orderDate >= startDate) && (!endDate || orderDate <= endDate);
             const teamMatch = filters.team === '' || order.Team === filters.team;
             const userMatch = filters.user === '' || order.User === filters.user;
