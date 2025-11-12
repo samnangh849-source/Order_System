@@ -22,6 +22,51 @@ const datePresets: { label: string, value: DateRangePreset }[] = [
     { label: 'Custom', value: 'custom' },
 ];
 
+// Helper Components
+const StatCard = ({ title, value, icon }: { title: string, value: string, icon: React.ReactNode }) => (
+    <div className="stat-card">
+        <div className="relative z-10">
+            <p className="stat-card-title">{title}</p>
+            <p className="stat-card-value">{value}</p>
+        </div>
+        <div className="background-icon" aria-hidden="true">
+            {icon}
+        </div>
+    </div>
+);
+
+
+const DataTable = ({ title, data, columns, customMapping, className = '' }: { title: string, data: any[], columns: string[], customMapping?: any, className?: string }) => (
+    <div className={`page-card ${className}`}>
+        <h3 className="text-lg font-bold mb-4 text-white">{title}</h3>
+        <div className="overflow-x-auto max-h-96">
+            <table className="report-table">
+                <thead>
+                    <tr>{columns.map(c => <th key={c}>{c}</th>)}</tr>
+                </thead>
+                <tbody>
+                    {data.length > 0 ? data.map((row, index) => (
+                        <tr key={index}>
+                            {columns.map(col => {
+                                const key = (customMapping && col in customMapping) ? customMapping[col] : col.toLowerCase();
+                                let value = row[key];
+                                if (typeof value === 'number') {
+                                    value = (key.includes('revenue') || key.includes('profit'))
+                                        ? `$${value.toFixed(2)}` 
+                                        : value;
+                                }
+                                return <td key={col}>{value}</td>
+                            })}
+                        </tr>
+                    )) : (
+                        <tr><td colSpan={columns.length} className="text-center text-gray-500 py-4">No data</td></tr>
+                    )}
+                </tbody>
+            </table>
+        </div>
+    </div>
+);
+
 const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
     const { geminiAi, appData } = useContext(AppContext);
     const [activeTab, setActiveTab] = useState<ReportTab>('overview');
@@ -233,63 +278,36 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
         }
     };
 
-    const renderTabs = () => (
-        <div className="report-tabs">
-            {(['overview', 'performance', 'profitability'] as ReportTab[]).map(tab => (
-                <button key={tab} onClick={() => setActiveTab(tab)} className={`report-tab ${activeTab === tab ? 'active' : ''}`}>
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-            ))}
-        </div>
-    );
-    
-    const renderFilters = () => (
-         <div className="report-filters">
-            <select className="form-select" value={filters.datePreset} onChange={e => handleDatePresetChange(e.target.value as DateRangePreset)}>
-                {datePresets.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </select>
-            {filters.datePreset === 'custom' && (
-                <>
-                    <input type="date" className="form-input" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} />
-                    <input type="date" className="form-input" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} />
-                </>
-            )}
-             <select className="form-select" value={filters.team} onChange={e => setFilters({...filters, team: e.target.value})}>
-                <option value="">All Teams</option>
-                {Array.from(new Set(appData.pages?.map((p: any) => p.Team))).map((t: any) => <option key={t} value={t}>{t}</option>)}
-             </select>
-              <select className="form-select" value={filters.user} onChange={e => setFilters({...filters, user: e.target.value})}>
-                <option value="">All Users</option>
-                {appData.users?.map((u: User) => <option key={u.UserName} value={u.UserName}>{u.FullName}</option>)}
-             </select>
-             <select className="form-select" value={filters.paymentStatus} onChange={e => setFilters({...filters, paymentStatus: e.target.value})}>
-                <option value="">All Payment Statuses</option>
-                <option value="Paid">Paid</option>
-                <option value="Unpaid">Unpaid</option>
-             </select>
-             <button onClick={handleExport} className="btn btn-secondary">Export to CSV</button>
-         </div>
-    );
-
     const OverviewTab = () => (
         <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard title="Total Revenue" value={`$${reportData.revenue.toFixed(2)}`} />
-                <StatCard title="Total Orders" value={reportData.totalOrders.toString()} />
-                <StatCard title="Average Order Value" value={`$${reportData.aov.toFixed(2)}`} />
-                <StatCard title="Net Profit" value={`$${reportData.profit.toFixed(2)}`} />
+                <StatCard 
+                    title="Total Revenue" 
+                    value={`$${reportData.revenue.toFixed(2)}`}
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>}
+                />
+                <StatCard 
+                    title="Total Orders" 
+                    value={reportData.totalOrders.toString()} 
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>}
+                />
+                <StatCard 
+                    title="Average Order Value" 
+                    value={`$${reportData.aov.toFixed(2)}`} 
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>}
+                />
+                <StatCard 
+                    title="Net Profit" 
+                    value={`$${reportData.profit.toFixed(2)}`} 
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>}
+                />
             </div>
             <div className="page-card">
                  <SimpleBarChart data={dailyRevenueData} title="Daily Revenue" />
             </div>
             <div className="page-card">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold text-white">AI-Powered Insights</h3>
-                    <GeminiButton onClick={handleAnalyze} isLoading={isAnalyzing} disabled={!geminiAi || filteredOrders.length === 0}>
-                        Analyze with Gemini
-                    </GeminiButton>
-                </div>
-                <p className="text-sm text-gray-400 mb-4">Gemini will analyze the data within the selected filters to provide key insights.</p>
+                <h3 className="text-xl font-bold text-white mb-4">AI-Powered Insights</h3>
+                <p className="text-sm text-gray-400 mb-4">Click "Analyze" in the control panel above to generate insights for the selected filters.</p>
                 {isAnalyzing && <div className="flex justify-center p-8"><Spinner /></div>}
                 {analysisError && <p className="text-red-400">{analysisError}</p>}
                 {analysisResult && (
@@ -318,10 +336,26 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
     const ProfitabilityTab = () => (
         <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard title="Total Revenue" value={`$${reportData.revenue.toFixed(2)}`} />
-                <StatCard title="Total Cost" value={`$${reportData.cost.toFixed(2)}`} />
-                <StatCard title="Net Profit" value={`$${reportData.profit.toFixed(2)}`} />
-                <StatCard title="Profit Margin" value={`${reportData.profitMargin.toFixed(2)}%`} />
+                <StatCard 
+                    title="Total Revenue" 
+                    value={`$${reportData.revenue.toFixed(2)}`} 
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>}
+                />
+                <StatCard 
+                    title="Total Cost" 
+                    value={`$${reportData.cost.toFixed(2)}`} 
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>}
+                />
+                <StatCard 
+                    title="Net Profit" 
+                    value={`$${reportData.profit.toFixed(2)}`} 
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>}
+                />
+                <StatCard 
+                    title="Profit Margin" 
+                    value={`${reportData.profitMargin.toFixed(2)}%`}
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>}
+                />
             </div>
             <div className="page-card">
                  <SimpleBarChart data={reportData.byTeam.map(p => ({label: p.label, value: p.profit}))} title="Net Profit by Team" />
@@ -333,8 +367,66 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
 
     return (
         <div className="w-full">
-            {renderTabs()}
-            {renderFilters()}
+            <h1 className="text-3xl font-bold text-white mb-4">របាយការណ៍</h1>
+            <div className="report-tabs">
+                {(['overview', 'performance', 'profitability'] as ReportTab[]).map(tab => (
+                    <button key={tab} onClick={() => setActiveTab(tab)} className={`report-tab ${activeTab === tab ? 'active' : ''}`}>
+                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    </button>
+                ))}
+            </div>
+
+            <div className="page-card my-6">
+                <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 items-end">
+                    <div className="col-span-2 lg:col-span-4 xl:col-span-2">
+                        <label className="text-xs text-gray-400">Date Range</label>
+                        <select className="form-select" value={filters.datePreset} onChange={e => handleDatePresetChange(e.target.value as DateRangePreset)}>
+                            {datePresets.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                        </select>
+                    </div>
+                    {filters.datePreset === 'custom' && (
+                        <>
+                           <div>
+                                <label className="text-xs text-gray-400">Start Date</label>
+                                <input type="date" className="form-input" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} />
+                           </div>
+                           <div>
+                                <label className="text-xs text-gray-400">End Date</label>
+                                <input type="date" className="form-input" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} />
+                           </div>
+                        </>
+                    )}
+                     <div>
+                        <label className="text-xs text-gray-400">Team</label>
+                         <select className="form-select" value={filters.team} onChange={e => setFilters({...filters, team: e.target.value})}>
+                            <option value="">All Teams</option>
+                            {Array.from(new Set(appData.pages?.map((p: any) => p.Team))).map((t: any) => <option key={t} value={t}>{t}</option>)}
+                         </select>
+                     </div>
+                      <div>
+                        <label className="text-xs text-gray-400">User</label>
+                          <select className="form-select" value={filters.user} onChange={e => setFilters({...filters, user: e.target.value})}>
+                            <option value="">All Users</option>
+                            {appData.users?.map((u: User) => <option key={u.UserName} value={u.UserName}>{u.FullName}</option>)}
+                         </select>
+                      </div>
+                     <div>
+                        <label className="text-xs text-gray-400">Payment</label>
+                         <select className="form-select" value={filters.paymentStatus} onChange={e => setFilters({...filters, paymentStatus: e.target.value})}>
+                            <option value="">All Statuses</option>
+                            <option value="Paid">Paid</option>
+                            <option value="Unpaid">Unpaid</option>
+                         </select>
+                     </div>
+                     <div className="col-span-2 xl:col-span-2 flex items-end gap-2">
+                         <button onClick={handleExport} className="btn btn-secondary w-full">Export CSV</button>
+                         <GeminiButton onClick={handleAnalyze} isLoading={isAnalyzing} disabled={!geminiAi || filteredOrders.length === 0} className="w-full">
+                            Analyze
+                        </GeminiButton>
+                     </div>
+                </div>
+            </div>
+
             <div className="mt-6">
                 {activeTab === 'overview' && <OverviewTab />}
                 {activeTab === 'performance' && <PerformanceTab />}
@@ -343,45 +435,5 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
         </div>
     );
 };
-
-// Helper Components
-const StatCard = ({ title, value }: { title: string, value: string }) => (
-    <div className="stat-card">
-        <p className="stat-card-title">{title}</p>
-        <p className="stat-card-value">{value}</p>
-    </div>
-);
-
-const DataTable = ({ title, data, columns, customMapping, className = '' }: { title: string, data: any[], columns: string[], customMapping?: any, className?: string }) => (
-    <div className={`page-card ${className}`}>
-        <h3 className="text-lg font-bold mb-4 text-white">{title}</h3>
-        <div className="overflow-x-auto max-h-96">
-            <table className="report-table">
-                <thead>
-                    <tr>{columns.map(c => <th key={c}>{c}</th>)}</tr>
-                </thead>
-                <tbody>
-                    {data.length > 0 ? data.map((row, index) => (
-                        <tr key={index}>
-                            {columns.map(col => {
-                                const key = (customMapping && col in customMapping) ? customMapping[col] : col.toLowerCase();
-                                let value = row[key];
-                                if (typeof value === 'number') {
-                                    value = (key.includes('revenue') || key.includes('profit'))
-                                        ? `$${value.toFixed(2)}` 
-                                        : value;
-                                }
-                                return <td key={col}>{value}</td>
-                            })}
-                        </tr>
-                    )) : (
-                        <tr><td colSpan={columns.length} className="text-center text-gray-500 py-4">No data</td></tr>
-                    )}
-                </tbody>
-            </table>
-        </div>
-    </div>
-);
-
 
 export default ReportsView;
