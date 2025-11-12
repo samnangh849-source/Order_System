@@ -149,9 +149,11 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         updateTagsOnBackend(selectedProductName, newTags);
     };
 
-    const handleTagSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        handleAddTag(tagInput);
+    const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            handleAddTag(tagInput);
+        }
     };
 
     const handleSelect = (productName: string) => {
@@ -213,25 +215,24 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
             
             {selectedProductName && (
                 <div className="mt-2 p-2 bg-gray-900/50 rounded-md">
-                    <form onSubmit={handleTagSubmit} className="flex flex-wrap gap-2 items-center">
+                    <div className="flex flex-wrap gap-2 items-center">
                         {tags.map(tag => (
                             <span key={tag} className="tag-badge">
                                 {tag}
-                                <button type="button" onClick={() => handleRemoveTag(tag)} className="ml-1 font-bold">&times;</button>
+                                <button onClick={() => handleRemoveTag(tag)} className="ml-1 font-bold">&times;</button>
                             </span>
                         ))}
                         <input 
                             type="text"
                             value={tagInput}
                             onChange={e => setTagInput(e.target.value)}
+                            onKeyDown={handleTagInputKeyDown}
                             placeholder="Add a tag..."
                             className="tag-input"
                             disabled={isSavingTags}
                         />
                          {isSavingTags && <Spinner size="sm"/>}
-                         {/* Hidden submit button to help trigger form submission on mobile */}
-                         <button type="submit" style={{ display: 'none' }} aria-hidden="true"></button>
-                    </form>
+                    </div>
                 </div>
             )}
 
