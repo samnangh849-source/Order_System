@@ -331,7 +331,8 @@ const BarcodeScannerModal = ({
 const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, onCancel }) => {
     const { appData, currentUser, previewImage, apiKey } = useContext(AppContext);
     const [currentStep, setCurrentStep] = useState(1);
-    const [order, setOrder] = useState<any>({
+    
+    const initialOrderState = useMemo(() => ({
         page: '',
         telegramValue: '',
         customer: { name: '', phone: '', province: '', district: '', sangkat: '', additionalLocation: '', shippingFee: '' },
@@ -342,7 +343,10 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
         subtotal: 0,
         grandTotal: 0,
         note: '',
-    });
+    }), []);
+
+    const [order, setOrder] = useState<any>(initialOrderState);
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [submissionStatus, setSubmissionStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -357,7 +361,51 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     const [mapSearchUrl, setMapSearchUrl] = useState('');
     const [scanMode, setScanMode] = useState<'single' | 'increment'>('increment');
     
-     const teamPages = useMemo(() => {
+    // --- START DRAFT SYSTEM LOGIC ---
+    const DRAFT_KEY = useMemo(() => `createOrderDraft_${currentUser?.UserName}_${team}`, [currentUser, team]);
+    
+    // Load draft from localStorage on initial component mount
+    useEffect(() => {
+        try {
+            const savedDraft = localStorage.getItem(DRAFT_KEY);
+            if (savedDraft) {
+                const parsedDraft = JSON.parse(savedDraft);
+                // Merge with initial state to ensure all fields are present, even if the draft is from an older version
+                setOrder((prev: any) => ({ ...prev, ...parsedDraft }));
+                
+                // Restore UI state for shipping fee option
+                if (parsedDraft.customer && typeof parsedDraft.customer.shippingFee === 'number') {
+                    setShippingFeeOption(parsedDraft.customer.shippingFee === 0 ? 'free' : 'charge');
+                }
+
+                alert('ទម្រង់ដែលមិនទាន់បានបញ្ជូនត្រូវបានស្ដារឡើងវិញ។\n(Unsubmitted draft restored.)');
+            }
+        } catch (e) {
+            console.error("Failed to load or parse draft from localStorage", e);
+            localStorage.removeItem(DRAFT_KEY); // Clear potentially corrupted data
+        }
+    }, [DRAFT_KEY, initialOrderState]);
+
+    // Debounced save to localStorage whenever order state changes
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(order));
+        }, 500); // 500ms debounce delay
+
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [order, DRAFT_KEY]);
+    // --- END DRAFT SYSTEM LOGIC ---
+
+    const handleCancel = () => {
+        if (window.confirm('តើអ្នកប្រាកដទេថាចង់បោះបង់? ទិន្នន័យដែលបានបញ្ចូលនឹងត្រូវล้างចោល។\nAre you sure you want to cancel? Your current draft will be cleared.')) {
+            localStorage.removeItem(DRAFT_KEY);
+            onCancel();
+        }
+    };
+    
+    const teamPages = useMemo(() => {
         if (!appData.pages) return [];
         return appData.pages.filter((p: any) => p.Team === team);
     }, [appData.pages, team]);
@@ -903,6 +951,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                 throw new Error(result.message || 'Failed to create order.');
             }
             
+            localStorage.removeItem(DRAFT_KEY); // Clear draft on success
             setSubmissionStatus({ type: 'success', message: `ការកម្មង់បានបង្កើតដោយជោគជ័យ! Order ID: ${result.orderId}` });
             setTimeout(() => {
                 onSaveSuccess();
@@ -1367,7 +1416,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
             )}
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl md:text-3xl font-bold text-white">បង្កើតការកម្មង់ថ្មី (ក្រុម {team})</h1>
-                <button onClick={onCancel} className="btn btn-secondary">បោះបង់</button>
+                <button onClick={handleCancel} className="btn btn-secondary">បោះបង់</button>
             </div>
              <style>{`
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
