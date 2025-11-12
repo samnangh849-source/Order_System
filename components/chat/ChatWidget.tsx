@@ -1,4 +1,4 @@
-import React, { useState, useContext, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useContext, useRef, useEffect, useCallback, useMemo } from 'react';
 import { AppContext } from '../../App';
 import { ChatMessage, User, BackendChatMessage } from '../../types';
 import Spinner from '../common/Spinner';
@@ -16,18 +16,42 @@ interface ChatWidgetProps {
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 type ActiveTab = 'chat' | 'users';
 
-// Use the correct raw GitHub content URL for the notification sound.
-const notificationSound = new Audio('/assets/notification.mp3');
+// Use a reliable, publicly accessible URL for the notification sound.
+const notificationSound = new Audio('https://raw.githubusercontent.com/NateeDev/aistudio-template-order-management/main/public/assets/notification.mp3');
+
+// Memoize the AudioPlayer to prevent re-renders when parent component's state changes, but its props don't.
+// This fixes the bug where all audio messages would refresh upon sending a new message.
+const MemoizedAudioPlayer = React.memo(AudioPlayer);
 
 const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
-    const { currentUser, appData, previewImage } = useContext(AppContext);
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const { currentUser, appData, previewImage, setUnreadCount } = useContext(AppContext);
+    
+    // Create a stable cache key based on the current user.
+    const CACHE_KEY = useMemo(() => currentUser ? `chatHistoryCache_${currentUser.UserName}` : null, [currentUser]);
+
+    const [messages, setMessages] = useState<ChatMessage[]>(() => {
+        // Initialize state from localStorage for instant loading.
+        if (!CACHE_KEY) return [];
+        try {
+            const cached = localStorage.getItem(CACHE_KEY);
+            if (cached && cached !== "undefined") {
+                return JSON.parse(cached);
+            }
+            return [];
+        } catch (e) {
+            console.error("Failed to parse chat cache", e);
+            localStorage.removeItem(CACHE_KEY); // Clear corrupted cache
+            return [];
+        }
+    });
+
     const [newMessage, setNewMessage] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const [isMuted, setIsMuted] = useState(() => localStorage.getItem('chatMuted') === 'true');
     const [mentionSuggestions, setMentionSuggestions] = useState<User[]>([]);
     const [mentionSelectionIndex, setMentionSelectionIndex] = useState<number>(0);
-    const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+    // Only show the main loader if there are no cached messages to display.
+    const [isHistoryLoading, setIsHistoryLoading] = useState(messages.length === 0);
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
     const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
 
@@ -38,6 +62,17 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     const hasFetchedHistory = useRef(false);
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Wrapper function to update both component state and localStorage simultaneously.
+    const setAndCacheMessages = useCallback((updater: React.SetStateAction<ChatMessage[]>) => {
+        setMessages(prevMessages => {
+            const newMessages = typeof updater === 'function' ? updater(prevMessages) : updater;
+            if (CACHE_KEY) {
+                localStorage.setItem(CACHE_KEY, JSON.stringify(newMessages));
+            }
+            return newMessages;
+        });
+    }, [CACHE_KEY]);
     
     const transformBackendMessage = useCallback((msg: BackendChatMessage): ChatMessage => {
         const user = appData.users?.find((u: User) => u.UserName === msg.UserName);
@@ -71,8 +106,8 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         };
     }, [appData.users]);
 
-    const fetchHistory = useCallback(async (isInitialLoad = false) => {
-        if (isInitialLoad) {
+    const fetchHistory = useCallback(async () => {
+        if (!hasFetchedHistory.current && messages.length === 0) {
             setIsHistoryLoading(true);
         }
         try {
@@ -81,31 +116,27 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
             const result = await response.json();
             if (result.status === 'success' && Array.isArray(result.data)) {
                 const fetchedMessages = result.data.map(transformBackendMessage);
-                setMessages(currentMessages => {
+                setAndCacheMessages(currentMessages => {
                     const messageMap = new Map<string, ChatMessage>();
-                    // For reconnects, add current messages first to preserve state
-                    if (!isInitialLoad) {
-                        currentMessages.forEach(msg => messageMap.set(msg.id, msg));
-                    }
-                    // Add fetched messages, overwriting/adding new ones
+                    // Add current messages from cache/state first.
+                    currentMessages.forEach(msg => messageMap.set(msg.id, msg));
+                    // Overwrite with fresh data from server to ensure consistency.
                     fetchedMessages.forEach(msg => messageMap.set(msg.id, msg));
-                    // Convert back to array and sort by timestamp
+                    // Convert back to a sorted array.
                     return Array.from(messageMap.values()).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
                 });
             }
         } catch (error) {
             console.error("Chat history error:", error);
         } finally {
-            if (isInitialLoad) {
-                setIsHistoryLoading(false);
-                hasFetchedHistory.current = true;
-            }
+            setIsHistoryLoading(false);
+            hasFetchedHistory.current = true;
         }
-    }, [transformBackendMessage]);
+    }, [transformBackendMessage, setAndCacheMessages, messages.length]);
 
     useEffect(() => {
         if (isOpen && !hasFetchedHistory.current) {
-            fetchHistory(true); // isInitialLoad = true
+            fetchHistory();
         }
     }, [isOpen, fetchHistory]);
 
@@ -123,7 +154,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
             console.log("WebSocket connected");
             setConnectionStatus('connected');
             // On connect/reconnect, fetch any messages that might have been missed.
-            fetchHistory(false); // isInitialLoad = false
+            fetchHistory();
         };
 
         ws.onclose = (event) => {
@@ -143,13 +174,13 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
             try {
                 const data = JSON.parse(event.data);
                 if (data.action === 'delete_message' && data.payload?.timestamp) {
-                    setMessages(prev => prev.filter(msg => msg.id !== data.payload.timestamp));
+                    setAndCacheMessages(prev => prev.filter(msg => msg.id !== data.payload.timestamp));
                     return;
                 }
                 
                 if (data.action === 'new_message' && data.payload?.Timestamp) {
                     const newMsg = transformBackendMessage(data.payload);
-                    setMessages(prev => {
+                    setAndCacheMessages(prev => {
                         // Prevent duplicates if message already exists
                         if (prev.some(m => m.id === newMsg.id && m.user === newMsg.user)) {
                             return prev;
@@ -157,15 +188,20 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                         return [...prev, newMsg];
                     });
 
-                    if (newMsg.user !== currentUser?.UserName && !isMuted) {
-                       notificationSound.play().catch(e => console.log("Notification sound blocked by browser."));
+                    if (newMsg.user !== currentUser?.UserName) {
+                        if (!isOpen) { // Check if widget is closed to update unread count
+                            setUnreadCount(prev => prev + 1);
+                        }
+                        if (!isMuted) {
+                           notificationSound.play().catch(e => console.log("Notification sound blocked by browser."));
+                        }
                     }
                 }
             } catch (error) {
                 console.error("Failed to parse WebSocket message:", error);
             }
         };
-    }, [isOpen, currentUser?.UserName, isMuted, transformBackendMessage, fetchHistory]);
+    }, [isOpen, currentUser?.UserName, isMuted, transformBackendMessage, fetchHistory, setUnreadCount, setAndCacheMessages]);
 
     useEffect(() => {
         if (isOpen && hasFetchedHistory.current) {
@@ -436,7 +472,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                                             onClick={() => previewImage(msg.content)}
                                         />
                                     }
-                                    {msg.type === 'audio' && msg.content && <AudioPlayer src={msg.content} />}
+                                    {msg.type === 'audio' && msg.content && <MemoizedAudioPlayer src={msg.content} />}
                                 </div>
                                 <span className="message-info">{new Date(msg.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit'})}</span>
                              </div>
