@@ -54,6 +54,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     const [isHistoryLoading, setIsHistoryLoading] = useState(messages.length === 0);
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
     const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
+    const [reconnectAttempts, setReconnectAttempts] = useState(0);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -62,6 +63,16 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     const hasFetchedHistory = useRef(false);
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    
+    // --- Refs for managing state within WebSocket callbacks to avoid stale closures ---
+    const isOpenRef = useRef(isOpen);
+    isOpenRef.current = isOpen;
+    const isMutedRef = useRef(isMuted);
+    isMutedRef.current = isMuted;
+    const currentUserRef = useRef(currentUser);
+    currentUserRef.current = currentUser;
+    
+    const MAX_RECONNECT_ATTEMPTS = 5;
 
     // Wrapper function to update both component state and localStorage simultaneously.
     const setAndCacheMessages = useCallback((updater: React.SetStateAction<ChatMessage[]>) => {
@@ -141,9 +152,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     }, [isOpen, fetchHistory]);
 
     const connectWebSocket = useCallback(() => {
-        if (wsRef.current && wsRef.current.readyState < 2) { // 0: CONNECTING, 1: OPEN
-            return;
-        }
+        if (wsRef.current && wsRef.current.readyState < 2) { return; }
 
         setConnectionStatus('connecting');
         const wsUrl = WEB_APP_URL.replace(/^http/, 'ws') + '/api/chat/ws';
@@ -153,21 +162,20 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         ws.onopen = () => {
             console.log("WebSocket connected");
             setConnectionStatus('connected');
-            // On connect/reconnect, fetch any messages that might have been missed.
+            setReconnectAttempts(0);
             fetchHistory();
         };
 
         ws.onclose = (event) => {
-            console.log("WebSocket disconnected", event.code, event.reason);
+            console.log("WebSocket disconnected. Code:", event.code, "Reason:", event.reason || 'No reason given');
             setConnectionStatus('disconnected');
-            if (isOpen && event.code !== 1000) { // Don't reconnect on clean close
-                if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-                reconnectTimeoutRef.current = setTimeout(connectWebSocket, 3000);
+            if (isOpenRef.current && event.code !== 1000) {
+                setReconnectAttempts(prev => Math.min(prev + 1, MAX_RECONNECT_ATTEMPTS + 1));
             }
         };
-
+        
         ws.onerror = (errorEvent) => {
-            console.error("A WebSocket error occurred. This is often followed by a 'close' event with more details. Raw event:", errorEvent);
+            console.error("A WebSocket error occurred:", errorEvent);
         };
 
         ws.onmessage = (event) => {
@@ -181,18 +189,17 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 if (data.action === 'new_message' && data.payload?.Timestamp) {
                     const newMsg = transformBackendMessage(data.payload);
                     setAndCacheMessages(prev => {
-                        // Prevent duplicates if message already exists
                         if (prev.some(m => m.id === newMsg.id && m.user === newMsg.user)) {
                             return prev;
                         }
                         return [...prev, newMsg];
                     });
 
-                    if (newMsg.user !== currentUser?.UserName) {
-                        if (!isOpen) { // Check if widget is closed to update unread count
+                    if (newMsg.user !== currentUserRef.current?.UserName) {
+                        if (!isOpenRef.current) {
                             setUnreadCount(prev => prev + 1);
                         }
-                        if (!isMuted) {
+                        if (!isMutedRef.current) {
                            notificationSound.play().catch(e => console.log("Notification sound blocked by browser."));
                         }
                     }
@@ -201,10 +208,12 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 console.error("Failed to parse WebSocket message:", error);
             }
         };
-    }, [isOpen, currentUser?.UserName, isMuted, transformBackendMessage, fetchHistory, setUnreadCount, setAndCacheMessages]);
+    }, [transformBackendMessage, fetchHistory, setUnreadCount, setAndCacheMessages]);
 
+    // Main effect for opening/closing the widget connection
     useEffect(() => {
         if (isOpen && hasFetchedHistory.current) {
+            setReconnectAttempts(0);
             connectWebSocket();
         }
 
@@ -212,13 +221,35 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
             if (reconnectTimeoutRef.current) {
                 clearTimeout(reconnectTimeoutRef.current);
             }
+            setReconnectAttempts(MAX_RECONNECT_ATTEMPTS + 1);
             if (wsRef.current) {
-                wsRef.current.onclose = null; // Prevent reconnect logic on manual close
-                wsRef.current.close(1000, "Component unmounting or widget closing");
+                wsRef.current.onclose = null;
+                wsRef.current.close(1000, "Widget closing");
                 wsRef.current = null;
             }
         };
     }, [isOpen, hasFetchedHistory.current, connectWebSocket]);
+
+    // Effect for handling the reconnection logic with exponential backoff
+    useEffect(() => {
+        if (reconnectAttempts > 0 && reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+            const delay = Math.pow(2, reconnectAttempts) * 1000 + Math.random() * 1000;
+            console.log(`WebSocket connection lost. Reconnecting in ${Math.round(delay / 1000)}s... (Attempt ${reconnectAttempts})`);
+            
+            reconnectTimeoutRef.current = setTimeout(() => {
+                connectWebSocket();
+            }, delay);
+
+        } else if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+            console.error("WebSocket reconnect attempts exceeded. Please check your connection or the server status.");
+        }
+
+        return () => {
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+            }
+        };
+    }, [reconnectAttempts, connectWebSocket]);
 
 
     useEffect(() => {
@@ -280,7 +311,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 
                 let userFriendlyMessage = "การផ្ញើសារបានបរាជ័យ។"; // "Message sending failed."
                 if (serverMessage.includes('Upload Folder ID is not configured')) {
-                    userFriendlyMessage = 'ការផ្ញើសារបានបរាជ័យ។ ការកំណត់រចនាសម្ព័ន្ធការ Upload ឯកសារលើ Server មិនត្រឹមត្រូវទេ។';
+                    userFriendlyMessage = 'การផ្ញើសារបានបរាជ័យ។ ការកំណត់รចនាសម្ព័ន្ធការ Upload ឯកសារលើ Server មិនត្រឹមត្រូវទេ។';
                 } else {
                     userFriendlyMessage += ` Server បានឆ្លើយតបថា: ${serverMessage}`;
                 }
