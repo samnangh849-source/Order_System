@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo, useContext } from 'react';
 import { MasterProduct } from '../../types';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
@@ -28,7 +29,7 @@ const highlightMatch = (text: string, query: string) => {
 };
 
 const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ products, selectedProductName, onSelect }) => {
-    const { refreshData } = useContext(AppContext);
+    const { updateProductInData } = useContext(AppContext);
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [inputValue, setInputValue] = useState(selectedProductName);
@@ -90,12 +91,16 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         if (!productName) return;
         setIsSavingTags(true);
         try {
-            const response = await fetch(`${WEB_APP_URL}/api/admin/update-product-tags`, {
+            // Switched to the generic update-sheet endpoint for a proper "overwrite" behavior.
+            // The specialized update-product-tags endpoint had flawed "merge" logic and
+            // rejected empty tag arrays, preventing tags from being cleared.
+            const response = await fetch(`${WEB_APP_URL}/api/admin/update-sheet`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    productName: productName,
-                    newTags: newTags,
+                    sheetName: "Products",
+                    primaryKey: { "ProductName": productName },
+                    newData: { "Tags": newTags.join(',') }
                 }),
             });
 
@@ -112,9 +117,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                 throw new Error(errorMessage);
             }
             
-            // On success, we don't need to parse the body if it's just "ok".
-            // The `response.ok` check is sufficient.
-            await refreshData();
+            updateProductInData(productName, { Tags: newTags.join(',') });
 
         } catch (error) {
             console.error("Error updating tags:", error);

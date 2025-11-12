@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { User } from './types';
+import { User, MasterProduct } from './types';
 import LoginPage from './pages/LoginPage';
 import AdminDashboard from './pages/AdminDashboard';
 import RoleSelectionPage from './pages/RoleSelectionPage';
@@ -11,6 +11,7 @@ import ImpersonationBanner from './components/common/ImpersonationBanner';
 import Spinner from './components/common/Spinner';
 import { WEB_APP_URL } from './constants';
 import ChatWidget from './components/chat/ChatWidget';
+import DataErrorModal from './components/common/DataErrorModal'; // NEW IMPORT
 
 declare global {
     interface Window {
@@ -28,11 +29,13 @@ export const AppContext = React.createContext<{
     returnToAdmin: () => void;
     refreshData: () => Promise<void>;
     updateCurrentUser: (updatedData: Partial<User>) => void;
+    updateProductInData: (productName: string, updatedProductData: Partial<MasterProduct>) => void;
     geminiAi: GoogleGenAI | null;
     apiKey: string | null;
     isChatVisible: boolean;
     setChatVisibility: (visible: boolean) => void;
     previewImage: (url: string) => void;
+    setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
 }>({
     currentUser: null,
     originalAdminUser: null,
@@ -43,11 +46,13 @@ export const AppContext = React.createContext<{
     returnToAdmin: () => {},
     refreshData: async () => {},
     updateCurrentUser: () => {},
+    updateProductInData: () => {},
     geminiAi: null,
     apiKey: null,
     isChatVisible: true,
     setChatVisibility: () => {},
     previewImage: () => {},
+    setUnreadCount: () => {},
 });
 
 const ImagePreviewModal: React.FC<{ imageUrl: string | null; onClose: () => void }> = ({ imageUrl, onClose }) => {
@@ -127,6 +132,8 @@ const App: React.FC = () => {
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [isChatVisible, setIsChatVisible] = useState(true);
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [dataError, setDataError] = useState<{ title: string; message: string; critical: boolean } | null>(null); // NEW STATE
     
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
@@ -171,6 +178,7 @@ const App: React.FC = () => {
         setOriginalAdminUser(null);
         setAppData({});
         setAppState('login');
+        setDataError(null); // Clear any errors on logout
     }, []);
 
     const fetchData = useCallback(async (forceRefresh = false) => {
@@ -197,13 +205,11 @@ const App: React.FC = () => {
             return;
         }
 
-        // If we're fetching, but have some (even stale) cache, set it first for a better UX
         if (cachedDataJson) {
             setAppData(cachedDataJson.data);
         }
 
         try {
-            // Fetch data sequentially to improve reliability on slow-starting servers
             const staticResponse = await fetch(`${WEB_APP_URL}/api/static-data`);
             if (!staticResponse.ok) {
                 throw new Error(`Could not fetch static app data from server. Status: ${staticResponse.status}`);
@@ -224,27 +230,31 @@ const App: React.FC = () => {
             const combinedData = { ...staticResult.data, users: usersResult.data };
             setAppData(combinedData);
             localStorage.setItem(CACHE_KEY, JSON.stringify({ data: combinedData, timestamp: new Date().getTime() }));
+            setDataError(null); // Clear error on successful fetch
         } catch (error) {
             console.error("Data Fetching Error:", error);
 
-            let alertMessage = "An unexpected error occurred while fetching data. The app will use older, cached data if available.";
+            const userFriendlyMessage = "បញ្ហា Server (500) បានកើតឡើងនៅពេលទាញយកទិន្នន័យ។\n\n" +
+                                      "បញ្ហានេះទំនងជាបណ្តាលមកពីបញ្ហាទិន្នន័យនៅក្នុង Google Sheets របស់អ្នក។\n\n" +
+                                      "មូលហេតុទូទៅ:\n" +
+                                      "- មានអក្សរនៅក្នុងជួរឈរដែលគួរតែជាលេខ (ឧ. 'Price', 'Cost')។\n" +
+                                      "- ឈ្មោះ Sheet ឬឈ្មោះជួរឈរ (Header) ត្រូវបានផ្លាស់ប្តូរ។\n\n" +
+                                      "សូមពិនិត្យមើលទិន្នន័យក្នុង Sheets របស់អ្នក រួចព្យាយាមម្តងទៀត។";
+            
+            const isCritical = !cachedDataJson;
 
-            if (error instanceof Error && error.message.includes("Status: 500")) {
-                alertMessage = "A server error (500) occurred while fetching data.\n\n" +
-                               "This is likely caused by an issue with the data in your Google Sheets.\n\n" +
-                               "Common causes:\n" +
-                               "- Text in a column that should be a number (e.g., 'Price', 'Cost').\n" +
-                               "- A sheet name or column header has been changed.\n\n" +
-                               "Please check the data in your sheets, especially 'Products', for any errors.\n\n" +
-                               "The app will now try to use older, cached data.";
-            }
-
-            if (!cachedDataJson) {
-                alert("Critical Error: Could not load initial application data.\n" + (error instanceof Error ? error.message : String(error)) + "\n\nPlease resolve the server issue and try again. The session will now be closed.");
-                logout();
+            if (isCritical) {
+                setDataError({
+                    title: "Critical Data Error / បញ្ហាទិន្នន័យធ្ងន់ធ្ងរ",
+                    message: `Could not load initial application data from the server. The application cannot start.\n\n${userFriendlyMessage}`,
+                    critical: true,
+                });
             } else {
-                alert("Warning:\n" + alertMessage);
-                console.warn("Failed to refresh data, using stale cached version.");
+                 setDataError({
+                    title: "Data Fetching Warning / ការព្រមានអំពីការទាញទិន្នន័យ",
+                    message: `Failed to fetch the latest data. You are viewing cached data which might be outdated.\n\n${userFriendlyMessage}`,
+                    critical: false,
+                });
             }
         } finally {
             setLoading(false);
@@ -293,12 +303,12 @@ const App: React.FC = () => {
                     }
                     determineAppState(user, isImpersonating);
                 }
+            } else {
+                setLoading(false); // No session, stop loading to show login page
             }
         } catch (error) {
             console.error("Session check failed:", error);
             logout(); // Clear corrupted session
-        } finally {
-            setLoading(false);
         }
     }, [fetchData, determineAppState, logout]);
 
@@ -307,13 +317,10 @@ const App: React.FC = () => {
         
         let key: string | undefined;
         try {
-            // This will work in environments where a build tool replaces process.env
             if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
                 key = process.env.API_KEY;
             }
         } catch (e) {
-            // This catch block handles cases where 'process' is not defined, 
-            // which is expected on static hosting like GitHub Pages.
             console.warn('`process.env` is not available. This is normal for static hosting.');
         }
 
@@ -330,7 +337,10 @@ const App: React.FC = () => {
         localStorage.setItem('orderAppSession', JSON.stringify(sessionData));
         setCurrentUser(user);
         fetchData(true).then(() => {
-            determineAppState(user, false);
+            // Only determine app state if there was no critical fetch error
+            if (!dataError || !dataError.critical) {
+                determineAppState(user, false);
+            }
         });
     };
     
@@ -374,6 +384,32 @@ const App: React.FC = () => {
         }
     };
     
+    const updateProductInData = (productName: string, updatedProductData: Partial<MasterProduct>) => {
+        setAppData(prevAppData => {
+            if (!prevAppData.products) {
+                console.warn('Attempted to update product, but appData.products is not available.');
+                return prevAppData;
+            }
+
+            const productIndex = prevAppData.products.findIndex((p: MasterProduct) => p.ProductName === productName);
+
+            if (productIndex === -1) {
+                console.warn(`Product "${productName}" not found for in-memory update.`);
+                return prevAppData;
+            }
+
+            const newProducts = [...prevAppData.products];
+            newProducts[productIndex] = { ...newProducts[productIndex], ...updatedProductData };
+            
+            const newAppData = { ...prevAppData, products: newProducts };
+
+            // Also update the local storage cache
+            localStorage.setItem('appDataCache', JSON.stringify({ data: newAppData, timestamp: new Date().getTime() }));
+
+            return newAppData;
+        });
+    };
+
     const previewImage = (url: string) => {
         if (url && !url.includes('placehold.co')) {
              setPreviewImageUrl(url);
@@ -381,7 +417,7 @@ const App: React.FC = () => {
     };
 
     const renderContent = () => {
-        if (loading) {
+        if (loading && !dataError) {
             return (
                 <div className="flex flex-col items-center justify-center min-h-screen">
                      <div className="page-card inline-flex flex-col items-center">
@@ -391,6 +427,9 @@ const App: React.FC = () => {
                 </div>
             );
         }
+        
+        // Don't render main content if there's a critical error to prevent a broken UI
+        if (dataError && dataError.critical) return null;
 
         switch (appState) {
             case 'login':
@@ -407,7 +446,7 @@ const App: React.FC = () => {
     };
     
     return (
-        <AppContext.Provider value={{ currentUser, originalAdminUser, appData, login, logout, loginAs, returnToAdmin, refreshData, updateCurrentUser, geminiAi, apiKey, isChatVisible, setChatVisibility: setIsChatVisible, previewImage }}>
+        <AppContext.Provider value={{ currentUser, originalAdminUser, appData, login, logout, loginAs, returnToAdmin, refreshData, updateCurrentUser, updateProductInData, geminiAi, apiKey, isChatVisible, setChatVisibility: setIsChatVisible, previewImage, setUnreadCount }}>
             <div className="min-h-screen w-full">
                 {originalAdminUser && <ImpersonationBanner />}
                 {currentUser && <Header onBackToRoleSelect={() => setAppState('role_selection')} />}
@@ -418,13 +457,24 @@ const App: React.FC = () => {
                     <>
                         <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
                         {!isChatOpen && (
-                            <button onClick={() => setIsChatOpen(true)} className="chat-fab" aria-label="Open Chat">
+                            <button onClick={() => { setIsChatOpen(true); setUnreadCount(0); }} className="chat-fab" aria-label="Open Chat">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                 </svg>
+                                {unreadCount > 0 && (
+                                    <span className="unread-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+                                )}
                             </button>
                         )}
                     </>
+                )}
+                 {dataError && (
+                    <DataErrorModal
+                        error={dataError}
+                        onRetry={() => fetchData(true)}
+                        onContinue={!dataError.critical ? () => setDataError(null) : undefined}
+                        onLogout={dataError.critical ? logout : undefined}
+                    />
                 )}
                  <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
             </div>
