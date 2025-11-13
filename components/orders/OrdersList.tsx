@@ -78,7 +78,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions, te
                  )}
             </div>
             <div className="overflow-x-auto">
-                <table className="admin-table responsive-table">
+                <table className="admin-table">
                     <thead>
                         <tr>
                             <th>Order ID</th>
@@ -98,27 +98,27 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions, te
                             const profit = order['Grand Total'] - (order['Total Product Cost ($)'] || 0) - (order['Internal Cost'] || 0);
                             return (
                                 <tr key={order['Order ID']}>
-                                    <td data-label="Order ID">{order['Order ID']}</td>
-                                    <td data-label="អតិថិជន">
+                                    <td>{order['Order ID']}</td>
+                                    <td>
                                         <div>{order['Customer Name']}</div>
                                         <div className="text-xs text-gray-400">{order['Customer Phone']}</div>
                                     </td>
-                                    <td data-label="User">{order.User}</td>
-                                    <td data-label="សរុប">${order['Grand Total'].toFixed(2)}</td>
-                                    {showActions && <td data-label="តម្លៃដើមសរុប">${(order['Total Product Cost ($)'] || 0).toFixed(2)}</td>}
+                                    <td>{order.User}</td>
+                                    <td>${order['Grand Total'].toFixed(2)}</td>
+                                    {showActions && <td>${(order['Total Product Cost ($)'] || 0).toFixed(2)}</td>}
                                     {showActions && (
-                                        <td data-label="ចំណេញ" className={profit >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                        <td className={profit >= 0 ? 'text-green-400' : 'text-red-400'}>
                                             ${profit.toFixed(2)}
                                         </td>
                                     )}
-                                    <td data-label="ស្ថានភាព">
+                                    <td>
                                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${order['Payment Status'] === 'Paid' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
                                             {order['Payment Status']}
                                         </span>
                                     </td>
-                                    <td data-label="កាលបរិច្ឆេទ">{new Date(order.Timestamp).toLocaleString('en-GB')}</td>
+                                    <td>{new Date(order.Timestamp).toLocaleString('en-GB')}</td>
                                     {hasPrintFeature && (
-                                        <td data-label="ព្រីន">
+                                        <td>
                                             <a 
                                                 href={generatePrintUrl(order)}
                                                 target="_blank" 
@@ -132,7 +132,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions, te
                                         </td>
                                     )}
                                     {showActions && (
-                                        <td data-label="Actions">
+                                        <td>
                                             <button onClick={() => onEdit && onEdit(order)} className="action-btn text-yellow-400 hover:text-yellow-600 p-1 text-base" title="Edit Order">✏️ កែសម្រួល</button>
                                         </td>
                                     )}

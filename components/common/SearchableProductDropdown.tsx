@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect, useMemo, useContext } from 'react';
 import { MasterProduct } from '../../types';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
@@ -58,6 +59,25 @@ const getRelevanceScore = (product: MasterProduct, query: string): number => {
     return score;
 }
 
+const HoldTooltip = ({ content, position }: { content: string; position: { x: number; y: number } | null }) => {
+    if (!position) return null;
+    return (
+        <div
+            className="fixed p-2 text-sm text-white bg-gray-900/80 backdrop-blur-sm border border-gray-600 rounded-md shadow-lg z-[9999]"
+            style={{
+                left: `${position.x + 10}px`,
+                top: `${position.y - 15}px`,
+                pointerEvents: 'none',
+                transform: 'translateY(-100%)',
+                maxWidth: '300px',
+                wordBreak: 'break-word',
+            }}
+        >
+            {content}
+        </div>
+    );
+};
+
 const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ products, selectedProductName, onSelect }) => {
     const { updateProductInData } = useContext(AppContext);
     const [isOpen, setIsOpen] = useState(false);
@@ -68,6 +88,10 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
     const [isSavingTags, setIsSavingTags] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const tagInputRef = useRef<HTMLInputElement>(null);
+    const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
+    const [tooltipContent, setTooltipContent] = useState('');
+    const holdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const wasHeldRef = useRef(false);
 
     const selectedProduct = useMemo(() => 
         products.find(p => p.ProductName === selectedProductName), 
@@ -96,18 +120,31 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
     }, [isOpen, selectedProductName]);
 
     const filteredProducts = useMemo(() => {
-        if (!searchTerm.trim()) {
-            return products.sort((a,b) => a.ProductName.localeCompare(b.ProductName));
+        const query = searchTerm.trim().toLowerCase();
+        if (!query) {
+            return products.sort((a, b) => b.ProductName.localeCompare(a.ProductName));
         }
 
-        return products
-            .map(product => ({
+        const searchTerms = query.split(/\s+/).filter(Boolean);
+
+        const scoredProducts = products.map(product => {
+            const searchableText = [
+                product.ProductName,
+                product.Barcode,
+                product.Tags,
+            ].filter(Boolean).join(' ').toLowerCase();
+
+            const allTermsMatch = searchTerms.every(term => searchableText.includes(term));
+
+            return {
                 ...product,
-                score: getRelevanceScore(product, searchTerm.trim()),
-            }))
-            .filter(product => product.score > 0)
-            .sort((a, b) => b.score - a.score);
-            
+                score: allTermsMatch ? getRelevanceScore(product, query) : 0,
+            };
+        });
+
+        return scoredProducts
+            .filter(p => p.score > 0)
+            .sort((a, b) => a.score - b.score);
     }, [products, searchTerm]);
 
     const showCustomAddOption = useMemo(() => {
@@ -225,8 +262,40 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         }
     };
 
+    const handleHoldStart = (e: React.MouseEvent | React.TouchEvent, content: string) => {
+        if ('button' in e && e.button !== 0) return;
+        wasHeldRef.current = false;
+        
+        const x = 'touches' in e ? e.touches[0].clientX : e.clientX;
+        const y = 'touches' in e ? e.touches[0].clientY : e.clientY;
+
+        holdTimeoutRef.current = setTimeout(() => {
+            wasHeldRef.current = true;
+            setTooltipContent(content);
+            setTooltipPosition({ x, y });
+        }, 500);
+    };
+
+    const handleHoldEnd = () => {
+        if (holdTimeoutRef.current) {
+            clearTimeout(holdTimeoutRef.current);
+        }
+        if (tooltipPosition) {
+            setTooltipPosition(null);
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (holdTimeoutRef.current) {
+                clearTimeout(holdTimeoutRef.current);
+            }
+        };
+    }, []);
+
     return (
         <div className="relative" ref={dropdownRef}>
+            <HoldTooltip content={tooltipContent} position={tooltipPosition} />
              <input
                 type="text"
                 className="form-input"
@@ -270,7 +339,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                          {showCustomAddOption && (
                             <li
                                 className="px-3 py-2 text-sm text-green-300 cursor-pointer hover:bg-blue-600 flex items-center gap-3 border-b border-gray-700"
-                                onMouseDown={() => handleSelect(searchTerm.trim())}
+                                onClick={() => handleSelect(searchTerm.trim())}
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
@@ -282,7 +351,17 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                             <li
                                 key={product.ProductName}
                                 className="px-3 py-2 text-sm text-gray-200 cursor-pointer hover:bg-blue-600 flex items-center gap-3"
-                                onMouseDown={() => handleSelect(product.ProductName)}
+                                onMouseDown={(e) => handleHoldStart(e, product.ProductName)}
+                                onMouseUp={handleHoldEnd}
+                                onMouseLeave={handleHoldEnd}
+                                onTouchStart={(e) => handleHoldStart(e, product.ProductName)}
+                                onTouchEnd={handleHoldEnd}
+                                onClick={() => {
+                                    if (!wasHeldRef.current) {
+                                        handleSelect(product.ProductName);
+                                    }
+                                }}
+                                onContextMenu={(e) => e.preventDefault()}
                             >
                                 <img src={convertGoogleDriveUrl(product.ImageURL)} alt={product.ProductName} className="w-10 h-10 object-cover rounded flex-shrink-0" />
                                 <div className="flex-grow overflow-hidden">
