@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect, useMemo, useContext } from 'react';
 import { MasterProduct } from '../../types';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
@@ -28,6 +27,36 @@ const highlightMatch = (text: string, query: string) => {
         </>
     );
 };
+
+const getRelevanceScore = (product: MasterProduct, query: string): number => {
+    const pName = product.ProductName.toLowerCase();
+    const pBarcode = (product.Barcode || '').toLowerCase();
+    const pTags = (product.Tags || '').toLowerCase();
+    const q = query.toLowerCase();
+    let score = 0;
+
+    if (!q) return 1; // Return a base score if query is empty
+
+    // Score based on ProductName
+    if (pName === q) score += 1000;
+    else if (pName.startsWith(q)) score += 100;
+    else if (pName.includes(q)) score += 10;
+    
+    // Score based on Barcode
+    if (pBarcode && pBarcode.includes(q)) {
+        if (pBarcode === q) score += 500;
+        else score += 20;
+    }
+    
+    // Score based on Tags
+    if (pTags) {
+        const tags = pTags.split(',').map(t => t.trim());
+        if (tags.some(t => t === q)) score += 80; // Exact tag match
+        else if (tags.some(t => t.includes(q))) score += 5;
+    }
+
+    return score;
+}
 
 const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ products, selectedProductName, onSelect }) => {
     const { updateProductInData } = useContext(AppContext);
@@ -67,20 +96,18 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
     }, [isOpen, selectedProductName]);
 
     const filteredProducts = useMemo(() => {
-        if (!searchTerm) return products;
-        const searchTerms = searchTerm.toLowerCase().split(' ').filter(Boolean);
-        if (searchTerms.length === 0) return products;
+        if (!searchTerm.trim()) {
+            return products.sort((a,b) => a.ProductName.localeCompare(b.ProductName));
+        }
 
-        return products.filter(product => {
-            const lowerProductName = product.ProductName.toLowerCase();
-            const lowerBarcode = (product.Barcode || '').toLowerCase();
-            const lowerTags = (product.Tags || '').toLowerCase();
-            return searchTerms.every(term => 
-                lowerProductName.includes(term) || 
-                lowerBarcode.includes(term) ||
-                lowerTags.includes(term)
-            );
-        }).sort((a, b) => a.ProductName.localeCompare(b.ProductName));
+        return products
+            .map(product => ({
+                ...product,
+                score: getRelevanceScore(product, searchTerm.trim()),
+            }))
+            .filter(product => product.score > 0)
+            .sort((a, b) => b.score - a.score);
+            
     }, [products, searchTerm]);
 
     const showCustomAddOption = useMemo(() => {
@@ -93,9 +120,6 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         if (!productName) return;
         setIsSavingTags(true);
         try {
-            // Switched to the generic update-sheet endpoint for a proper "overwrite" behavior.
-            // The specialized update-product-tags endpoint had flawed "merge" logic and
-            // rejected empty tag arrays, preventing tags from being cleared.
             const response = await fetch(`${WEB_APP_URL}/api/admin/update-sheet`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -109,11 +133,9 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
             if (!response.ok) {
                 let errorMessage = 'Failed to update tags.';
                 try {
-                    // Try to parse a JSON error from the backend
                     const errorResult = await response.json();
                     errorMessage = errorResult.message || JSON.stringify(errorResult);
                 } catch (e) {
-                    // If parsing fails, it's likely a plain text error
                     errorMessage = `Server Error: ${await response.text()}`;
                 }
                 throw new Error(errorMessage);
@@ -124,7 +146,6 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         } catch (error) {
             console.error("Error updating tags:", error);
             alert(`Could not save tags: ${(error as Error).message}`);
-            // Revert UI on failure
             if (selectedProduct && selectedProduct.Tags) {
                 setTags(selectedProduct.Tags.split(',').map(t => t.trim()).filter(Boolean));
             } else {
@@ -136,7 +157,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
     };
 
     const handleAddTag = (tagToAdd: string) => {
-        const newTag = tagToAdd.trim().replace(/,/g, ''); // remove commas
+        const newTag = tagToAdd.trim().replace(/,/g, '');
         if (newTag && !tags.includes(newTag)) {
             const newTags = [...tags, newTag];
             setTags(newTags);
@@ -171,20 +192,24 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
     };
 
     const handleInputFocus = () => {
-        setSearchTerm(inputValue);
+        setSearchTerm('');
         setIsOpen(true);
     };
 
     const handleInputBlur = () => {
-        // Delay to allow click events on dropdown to register
         setTimeout(() => {
-            if (isOpen) {
-                if (showCustomAddOption && inputValue.trim()) {
-                    handleSelect(inputValue.trim());
-                } else {
-                    setInputValue(selectedProductName);
-                    setIsOpen(false);
-                }
+            if (!isOpen) return;
+
+            const trimmedInput = inputValue.trim().toLowerCase();
+            const exactMatch = products.find(p => p.ProductName.toLowerCase() === trimmedInput);
+
+            if (exactMatch) {
+                handleSelect(exactMatch.ProductName);
+            } else if (showCustomAddOption && inputValue.trim()) {
+                handleSelect(inputValue.trim());
+            } else {
+                setInputValue(selectedProductName);
+                setIsOpen(false);
             }
         }, 200);
     };

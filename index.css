@@ -1,5 +1,4 @@
 
-
 /* General Body & Flare */
 body {
     font-family: 'Kantumruy Pro', sans-serif;
@@ -50,6 +49,13 @@ body {
 }
 .form-input::placeholder, .form-textarea::placeholder {
     color: #6b7280;
+}
+.input-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #9ca3af;
+    margin-bottom: 0.5rem;
 }
 
 /* Buttons */
@@ -225,58 +231,28 @@ body {
     margin-top: 0.25rem;
 }
 
-/* Responsive Table / Order Cards */
+/* Responsive Table Styles for Mobile */
 @media (max-width: 767px) {
-    .responsive-table thead {
-        display: none;
+    /* The card-view styles for .responsive-table have been removed. */
+    /* Instead, we make all tables compact for better horizontal scrolling. */
+    .admin-table, .report-table {
+        /* These styles will only apply on mobile due to the media query */
+        font-size: 0.8rem;
+        white-space: nowrap; /* Crucial for horizontal scrolling */
     }
-    .responsive-table, .responsive-table tbody, .responsive-table tr {
-        display: block;
-    }
-    .responsive-table tr {
-        margin-bottom: 1rem;
-        border: 1px solid #374151;
-        border-radius: 0.75rem;
-        padding: 1rem;
-        background-color: #222c3e;
-    }
-    .responsive-table td {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.75rem 0.25rem;
-        border: none;
-        border-bottom: 1px solid #374151;
-        text-align: right;
-        background-color: transparent !important;
-    }
-    .responsive-table td:last-child {
-        border-bottom: none;
-        padding-top: 1rem;
-        padding-bottom: 0;
-        justify-content: flex-end; /* for action buttons */
-        gap: 0.5rem;
-    }
-    .responsive-table td::before {
-        content: attr(data-label);
-        font-weight: 600;
-        text-align: left;
-        color: #9ca3af;
-        margin-right: 1rem;
+    .admin-table th, .admin-table td,
+    .report-table th, .report-table td {
+        padding: 0.5rem; /* Tighter padding */
     }
 
-    /* Reposition Chat FAB on mobile when Admin bottom nav is visible */
-    body.admin-view .chat-fab {
+    body.admin-view .chat-fab:not(.fab) {
         bottom: 90px;
     }
-
     body.admin-view .chat-widget-container {
         bottom: 90px;
-        right: 10px;
-        width: calc(100% - 20px);
-        height: calc(100% - 100px);
     }
 }
+
 
 /* Landscape mobile adjustments */
 @media (max-height: 500px) and (orientation: landscape) {
@@ -287,7 +263,6 @@ body {
         padding: 1rem;
         font-size: 1rem;
     }
-    /* Make header smaller in landscape */
     header.fixed {
         padding: 0.25rem 1rem !important;
     }
@@ -299,7 +274,7 @@ body {
         height: 2rem !important;
     }
     main {
-        padding-top: 4rem !important; /* Adjust based on new header size */
+        padding-top: 4rem !important; 
     }
 }
 
@@ -332,7 +307,7 @@ body {
     position: absolute;
     top: -2px;
     right: -2px;
-    background-color: #ef4444; /* red-500 */
+    background-color: #ef4444; 
     color: white;
     border-radius: 50%;
     width: 24px;
@@ -342,7 +317,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 2px solid #111827; /* Match body background */
+    border: 2px solid #111827; 
     transform: scale(0);
     animation: scale-in-bounce 0.4s forwards;
 }
@@ -391,14 +366,14 @@ body {
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background-color: #f87171; /* Red - disconnected */
+    background-color: #f87171; 
     transition: background-color 0.3s;
 }
 .chat-header .connection-status.connected {
-    background-color: #4ade80; /* Green - connected */
+    background-color: #4ade80; 
 }
 .chat-header .connection-status.connecting {
-    background-color: #facc15; /* Yellow - connecting */
+    background-color: #facc15; 
     animation: pulse 1.5s infinite;
 }
 .chat-header .title-group {
@@ -452,7 +427,7 @@ body {
 .chat-body {
     flex-grow: 1;
     overflow-y: auto;
-    position: relative; /* For spinners */
+    position: relative; 
 }
 .chat-messages {
     padding: 1rem;
@@ -461,7 +436,6 @@ body {
     gap: 0.75rem;
 }
 
-/* NEW: Message container for layout and actions */
 .message-container {
     display: flex;
     align-items: flex-end;
@@ -491,7 +465,7 @@ body {
     padding: 0.5rem 0.75rem;
     border-radius: 1rem;
     color: #e5e7eb;
-    width: 100%; /* For audio player */
+    width: 100%; 
 }
 .message-bubble.current-user .message-content {
     background-color: #2563eb;
@@ -521,7 +495,6 @@ body {
     border-radius: 4px;
 }
 
-/* NEW: Delete message button */
 .delete-message-btn {
     flex-shrink: 0;
     opacity: 0;
@@ -545,7 +518,7 @@ body {
     transform: scale(1);
 }
 .delete-message-btn:hover {
-    background: #ef4444; /* Red on hover */
+    background: #ef4444; 
     color: white;
 }
 
@@ -593,7 +566,7 @@ body {
 }
 .chat-input-area .form-input {
     border-radius: 1.5rem;
-    padding-right: 3rem; /* Space for send button */
+    padding-right: 3rem; 
 }
 .chat-input-area .icon-btn {
     background: none;
@@ -652,7 +625,6 @@ body {
     color: white;
 }
 
-/* Mention Suggestions */
 .mention-suggestions-popup {
     position: absolute;
     bottom: 100%;
@@ -690,16 +662,15 @@ body {
     font-size: 0.8rem;
 }
 
-/* --- NEW: Audio Player Styles --- */
 .audio-player {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     width: 100%;
-    min-width: 200px; /* Ensure it has a minimum width */
+    min-width: 200px; 
 }
 .play-pause-btn {
-    background-color: #60a5fa; /* A lighter blue */
+    background-color: #60a5fa; 
     border: none;
     border-radius: 50%;
     width: 32px;
@@ -743,7 +714,7 @@ body {
     position: absolute;
     top: 50%;
     transform: translate(-50%, -50%);
-    pointer-events: none; /* So it doesn't interfere with the click on the bar */
+    pointer-events: none; 
 }
 .message-bubble.current-user .progress-thumb {
     background-color: white;
@@ -758,10 +729,13 @@ body {
 .message-bubble.current-user .time-display {
     color: white;
 }
-/* --- END: Audio Player Styles --- */
 
 
-/* Mobile Login Page UX Improvements */
+.login-page-container .page-card {
+    background-color: transparent;
+    backdrop-filter: none;
+    box-shadow: none;
+}
 @media (max-width: 640px) {
     .login-page-container .page-card {
         width: 100%;
@@ -771,9 +745,6 @@ body {
         display: flex;
         flex-direction: column;
         justify-content: center;
-        background-color: transparent;
-        backdrop-filter: none;
-        box-shadow: none;
         padding: 1.5rem;
     }
 
@@ -788,32 +759,29 @@ body {
     }
 }
 
-/* Create Order Progress Bar */
 .progress-bar {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start; /* Align items to the top for consistent alignment */
-    margin-bottom: 2.5rem; /* More margin to accommodate labels */
+    align-items: flex-start;
+    margin-bottom: 2.5rem;
     position: relative;
-    padding: 0 10px; /* Padding for small screens */
+    padding: 0 10px;
 }
-/* This is the gray line underneath */
 .progress-line {
     position: absolute;
-    top: 16px; /* Vertically center with the 32px circle */
+    top: 16px;
     left: 5%;
     width: 90%;
     height: 2px;
-    background-color: #374151; /* Line color from image */
+    background-color: #374151;
     transform: translateY(-50%);
     z-index: 1;
 }
-/* This is the blue progress line that animates */
 .progress-line-active {
     position: absolute;
-    top: 16px; /* Vertically center with the 32px circle */
+    top: 16px;
     left: 5%;
-    width: 0; /* Starts at 0, width controlled by inline style */
+    width: 0;
     height: 2px;
     background-color: #3b82f6;
     transform: translateY(-50%);
@@ -826,51 +794,48 @@ body {
     align-items: center;
     text-align: center;
     z-index: 3;
-    width: 80px; /* Give some space for labels to not overlap */
+    width: 80px;
 }
 
-/* Default state (Upcoming) - matches step 2, 3, 4 in image */
 .progress-step-circle {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    border: 2px solid #4b5563; /* Lighter gray border */
-    background-color: #1f2937; /* Dark background inside circle */
+    border: 2px solid #4b5563;
+    background-color: #1f2937;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: bold;
-    color: #9ca3af; /* Muted number color */
+    color: #9ca3af;
     transition: all 0.4s ease-in-out;
 }
 .progress-step-label {
     margin-top: 0.5rem;
-    font-size: 0.8rem; /* A bit larger for readability */
+    font-size: 0.8rem;
     font-weight: 500;
-    color: #6b7280; /* Muted label color */
+    color: #6b7280;
     transition: color 0.4s ease-in-out;
-    line-height: 1.2; /* Better line spacing for potential wrapping */
+    line-height: 1.2;
 }
 
-/* Completed state - checkmark */
 .progress-step.completed .progress-step-circle {
-    background-color: #3b82f6; /* Blue background */
+    background-color: #3b82f6;
     border-color: #3b82f6;
     color: white;
 }
 .progress-step.completed .progress-step-label {
-    color: #d1d5db; /* Brighter label */
+    color: #d1d5db;
 }
 
-/* Active (current) state - matches step 1 in image */
 .progress-step.active .progress-step-circle {
-    background-color: #3b82f6; /* Bright blue background */
+    background-color: #3b82f6;
     border-color: #3b82f6;
     color: white;
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3); /* Add a subtle glow for emphasis */
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3);
 }
 .progress-step.active .progress-step-label {
-    color: #ffffff; /* Brightest white label */
+    color: #ffffff;
     font-weight: 600;
 }
 
@@ -886,10 +851,10 @@ body {
         left: 3%;
     }
     .progress-step {
-        width: 65px; /* Narrower for mobile */
+        width: 65px;
     }
     .progress-step-label {
-        font-size: 0.7rem; /* Smaller font on mobile to prevent wrapping */
+        font-size: 0.7rem;
     }
 }
 
@@ -916,16 +881,6 @@ body {
     border-bottom-color: #3b82f6;
 }
 
-.report-filters {
-    background-color: rgba(31, 41, 55, 0.5);
-    padding: 1rem;
-    border-radius: 0.75rem;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
 .report-table {
     width: 100%;
     font-size: 0.875rem;
@@ -944,50 +899,54 @@ body {
     background-color: #1f2937;
 }
 
-
-.stat-card {
+.stat-card-new {
     background-color: #1f2937;
     border: 1px solid #374151;
     border-radius: 0.75rem;
-    padding: 1.5rem;
+    padding: 1rem 1.5rem;
+    transition: all 0.2s ease-in-out;
 }
-.stat-card-title {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: #9ca3af;
-}
-.stat-card-value {
-    font-size: 2.25rem;
-    font-weight: bold;
-    color: white;
-}
-.stat-card-comparison {
-    font-size: 0.875rem;
-    font-weight: 500;
-    margin-top: 0.25rem;
+.stat-card-new:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+    border-color: #4b5563;
 }
 
-.chart-container {
-    height: 300px;
-    padding: 1rem;
+/* Report Filter Panel (Bottom Sheet) */
+.filter-panel-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0,0,0,0.7);
+    z-index: 60;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+}
+.filter-panel-overlay.open {
+    opacity: 1;
+    visibility: visible;
 }
 
-.gemini-analysis {
+.filter-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
     background-color: #1f2937;
-    border: 1px solid #374151;
-    border-radius: 0.75rem;
-    padding: 1.5rem;
+    border-top: 1px solid #374151;
+    border-radius: 1rem 1rem 0 0;
+    z-index: 70;
+    transform: translateY(100%);
+    transition: transform 0.3s ease-in-out;
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;
 }
-.gemini-analysis ul {
-    list-style-type: disc;
-    padding-left: 1.5rem;
-    color: #d1d5db;
-}
-.gemini-analysis li {
-    margin-bottom: 0.5rem;
+.filter-panel.open {
+    transform: translateY(0);
 }
 
-/* === NEW: Performance Tracking System Styles === */
+
 .performance-card {
     background-color: #1f2937;
     border-radius: 0.75rem;
@@ -1043,7 +1002,6 @@ body {
     justify-content: center;
 }
 
-/* === UPDATED: Tag input styles === */
 .tags-input-container {
     display: flex;
     flex-wrap: wrap;
@@ -1103,7 +1061,6 @@ body {
     min-width: 100px;
 }
 
-/* UPDATED: Quantity Stepper Styles */
 .quantity-stepper {
     display: flex;
     align-items: center;
@@ -1114,7 +1071,6 @@ body {
     width: 100%;
     max-width: 130px;
 }
-/* NEW: Replaced input with a non-editable span for a more mobile-friendly experience */
 .quantity-display {
     width: 1px;
     min-width: 0;
@@ -1131,7 +1087,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    user-select: none; /* Prevent text selection */
+    user-select: none;
 }
 .quantity-stepper button {
     background-color: #374151;
@@ -1154,4 +1110,50 @@ body {
 .quantity-stepper button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* Settings Dashboard Mobile Styles */
+.settings-list-item {
+    width: 100%;
+    text-align: left;
+    background-color: #1f2937;
+    border: 1px solid #374151;
+    color: #d1d5db;
+    border-radius: 0.75rem;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background-color 0.2s;
+}
+.settings-list-item:hover {
+    background-color: #374151;
+}
+
+.settings-detail-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.fab {
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    width: 56px;
+    height: 56px;
+    background-color: #2563eb;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+    border: none;
+    cursor: pointer;
+    z-index: 50;
+    transition: transform 0.2s;
+}
+.fab:hover {
+    transform: scale(1.1);
 }

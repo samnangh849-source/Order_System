@@ -1,263 +1,209 @@
 import React, { useState, useMemo, useContext, useEffect } from 'react';
-import { ParsedOrder, User, AppData } from '../../types';
+import { ParsedOrder, User, AppData, MasterProduct, ShippingMethod } from '../../types';
 import { AppContext } from '../../App';
 import { analyzeReportData, generateSalesForecast } from '../../services/geminiService';
 import GeminiButton from '../common/GeminiButton';
 import Spinner from '../common/Spinner';
 import SimpleBarChart from './SimpleBarChart';
+import { convertGoogleDriveUrl } from '../../utils/fileUtils';
 
 interface ReportsViewProps {
     orders: ParsedOrder[];
+    allOrders: ParsedOrder[]; // For forecasting
+    reportType: 'overview' | 'performance' | 'profitability' | 'forecasting' | 'shipping';
 }
 
-type ReportTab = 'overview' | 'performance' | 'profitability' | 'forecasting';
-type DateRangePreset = 'all' | 'today' | 'this_week' | 'this_month' | 'this_year' | 'custom';
+type ProfitView = 'product' | 'page' | 'team';
+type ShippingCostView = 'service' | 'driver';
 
-const datePresets: { label: string, value: DateRangePreset }[] = [
-    { label: 'All Time', value: 'all' },
-    { label: 'Today', value: 'today' },
-    { label: 'This Week', value: 'this_week' },
-    { label: 'This Month', value: 'this_month' },
-    { label: 'This Year', value: 'this_year' },
-    { label: 'Custom', value: 'custom' },
-];
+const ColumnToggler = ({ columns, visibleColumns, onToggle }: { columns: { key: string, label: string }[], visibleColumns: Set<string>, onToggle: (key: string) => void }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const ref = React.useRef<HTMLDivElement>(null);
 
-// Helper Components
-const StatCard = ({ title, value, icon }: { title: string, value: string, icon: React.ReactNode }) => (
-    <div className="stat-card">
-        <div className="relative z-10">
-            <p className="stat-card-title">{title}</p>
-            <p className="stat-card-value">{value}</p>
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (ref.current && !ref.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    return (
+        <div className="relative" ref={ref}>
+            <button onClick={() => setIsOpen(!isOpen)} className="btn btn-secondary !py-1 !px-3 text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
+                Columns
+            </button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-gray-700 border border-gray-600 rounded-md shadow-lg z-20">
+                    {columns.map(col => (
+                        <label key={col.key} className="flex items-center px-3 py-2 text-sm text-gray-200 hover:bg-gray-600 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-blue-500 focus:ring-blue-500"
+                                checked={visibleColumns.has(col.key)}
+                                onChange={() => onToggle(col.key)}
+                            />
+                            <span className="ml-3">{col.label}</span>
+                        </label>
+                    ))}
+                </div>
+            )}
         </div>
-        <div className="background-icon" aria-hidden="true">
-            {icon}
+    );
+}
+
+const DataTable = ({ title, data, columns, visibleColumns, onColumnToggle, className = '' }: { title: string, data: any[], columns: { key: string, label: string, render?: (value: any, row: any) => React.ReactNode }[], visibleColumns: Set<string>, onColumnToggle: (key: string) => void, className?: string }) => {
+    const activeColumns = useMemo(() => columns.filter(c => visibleColumns.has(c.key)), [columns, visibleColumns]);
+
+    return (
+        <div className={`page-card ${className}`}>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-white">{title}</h3>
+                <ColumnToggler columns={columns} visibleColumns={visibleColumns} onToggle={onColumnToggle} />
+            </div>
+            <div className="overflow-auto max-h-[calc(100vh-25rem)]">
+                <table className="report-table">
+                    <thead>
+                        <tr>{activeColumns.map(c => <th key={c.key}>{c.label}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                        {data.length > 0 ? data.map((row, index) => (
+                            <tr key={index}>
+                                {activeColumns.map(col => {
+                                    const value = row[col.key];
+                                    return <td key={col.key}>{col.render ? col.render(value, row) : value}</td>
+                                })}
+                            </tr>
+                        )) : (
+                            <tr><td colSpan={activeColumns.length} className="text-center text-gray-500 py-4">No data</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
+// New redesigned stat card
+const StatCardRedesigned = ({ title, value, change, changeType, icon }: { title: string, value: string, change: string, changeType: 'increase' | 'decrease' | 'neutral', icon: React.ReactNode }) => {
+    const changeColor = changeType === 'increase' ? 'text-green-400' : changeType === 'decrease' ? 'text-red-400' : 'text-gray-400';
+    const ChangeIcon = changeType === 'increase' ? 
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /> : 
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11 17l-5-5m0 0l5-5m-5 5h12" />;
 
-const DataTable = ({ title, data, columns, customMapping, className = '' }: { title: string, data: any[], columns: string[], customMapping?: any, className?: string }) => (
-    <div className={`page-card ${className}`}>
-        <h3 className="text-lg font-bold mb-4 text-white">{title}</h3>
-        <div className="overflow-x-auto max-h-96">
-            <table className="report-table">
-                <thead>
-                    <tr>{columns.map(c => <th key={c}>{c}</th>)}</tr>
-                </thead>
-                <tbody>
-                    {data.length > 0 ? data.map((row, index) => (
-                        <tr key={index}>
-                            {columns.map(col => {
-                                const key = (customMapping && col in customMapping) ? customMapping[col] : col.toLowerCase();
-                                let value = row[key];
-                                if (typeof value === 'number') {
-                                    value = (key.includes('revenue') || key.includes('profit'))
-                                        ? `$${value.toFixed(2)}` 
-                                        : value;
-                                }
-                                return <td key={col}>{value}</td>
-                            })}
-                        </tr>
-                    )) : (
-                        <tr><td colSpan={columns.length} className="text-center text-gray-500 py-4">No data</td></tr>
-                    )}
-                </tbody>
-            </table>
+    return (
+        <div className="stat-card-new">
+            <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-400">{title}</span>
+                <div className="text-blue-400">{icon}</div>
+            </div>
+            <div className="mt-2">
+                <p className="text-3xl font-bold text-white">{value}</p>
+                <div className="flex items-center text-sm mt-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 mr-1 ${changeColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">{ChangeIcon}</svg>
+                    <span className={`${changeColor} font-semibold`}>{change}</span>
+                    <span className="text-gray-500 ml-1">vs last period</span>
+                </div>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
-const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
+
+const ReportsView: React.FC<ReportsViewProps> = ({ orders: filteredOrders, allOrders, reportType }) => {
     const { geminiAi, appData } = useContext(AppContext);
-    const [activeTab, setActiveTab] = useState<ReportTab>('overview');
     
-    const [filters, setFilters] = useState({
-        datePreset: 'this_month' as DateRangePreset,
-        startDate: '',
-        endDate: '',
-        team: '',
-        user: '',
-        paymentStatus: ''
-    });
-
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [analysisResult, setAnalysisResult] = useState('');
     const [analysisError, setAnalysisError] = useState('');
 
-
-    const handleDatePresetChange = (preset: DateRangePreset) => {
-        if (preset === 'custom') {
-            setFilters({ ...filters, datePreset: preset });
-            return;
-        }
-        if (preset === 'all') {
-            setFilters({ ...filters, datePreset: preset, startDate: '', endDate: '' });
-            return;
-        }
-
-        const now = new Date();
-        let start = new Date();
-        let end = new Date();
-
-        switch (preset) {
-            case 'today':
-                // start and end are already today's date
-                break;
-            case 'this_week':
-                const dayOfWeek = now.getDay(); // 0 for Sunday
-                start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
-                end = new Date(start);
-                end.setDate(start.getDate() + 6);
-                break;
-            case 'this_month':
-                start = new Date(now.getFullYear(), now.getMonth(), 1);
-                end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-                break;
-            case 'this_year':
-                start = new Date(now.getFullYear(), 0, 1);
-                end = new Date(now.getFullYear(), 11, 31);
-                break;
-        }
-
-        const toLocalYYYYMMDD = (d: Date) => {
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-
-        setFilters({
-            ...filters,
-            datePreset: preset,
-            startDate: toLocalYYYYMMDD(start),
-            endDate: toLocalYYYYMMDD(end)
-        });
-    };
-    
-    useEffect(() => {
-        handleDatePresetChange('this_month');
-    }, []);
-
-
-    const filteredOrders = useMemo(() => {
-        return orders.filter(order => {
-            // Correctly parse the filter dates as local time to avoid timezone issues.
-            // new Date('YYYY-MM-DD') is parsed as UTC midnight, which can cause orders on the start date to be excluded.
-            // Appending 'T00:00:00' makes the parser treat it as a local date.
-            const startDate = filters.startDate ? new Date(`${filters.startDate}T00:00:00`) : null;
-            const endDate = filters.endDate ? new Date(`${filters.endDate}T23:59:59`) : null;
-
-            const orderDate = new Date(order.Timestamp);
-            
-            const dateMatch = (!startDate || orderDate >= startDate) && (!endDate || orderDate <= endDate);
-            const teamMatch = filters.team === '' || order.Team === filters.team;
-            const userMatch = filters.user === '' || order.User === filters.user;
-            const paymentMatch = filters.paymentStatus === '' || order['Payment Status'] === filters.paymentStatus;
-
-            return dateMatch && teamMatch && userMatch && paymentMatch;
-        });
-    }, [orders, filters]);
-
     const reportData = useMemo(() => {
         const revenue = filteredOrders.reduce((sum, o) => sum + o['Grand Total'], 0);
         const totalProductCost = filteredOrders.reduce((sum, o) => sum + (o['Total Product Cost ($)'] || 0), 0);
-        const totalInternalCost = filteredOrders.reduce((sum, o) => sum + o['Internal Cost'], 0);
+        const totalInternalCost = filteredOrders.reduce((sum, o) => sum + (o['Internal Cost'] || 0), 0);
         const profit = revenue - totalProductCost - totalInternalCost;
         const totalOrders = filteredOrders.length;
         const aov = totalOrders > 0 ? revenue / totalOrders : 0;
         const profitMargin = revenue > 0 ? (profit / revenue) * 100 : 0;
 
-        const aggregateBy = (key: keyof ParsedOrder) => {
-             const results = filteredOrders.reduce((acc, order) => {
-                const groupKey = String(order[key] || 'N/A');
-                if (!acc[groupKey]) {
-                    acc[groupKey] = { revenue: 0, orders: 0, profit: 0, units: 0 };
+        const aggregateBy = (key: 'Team' | 'User' | 'Page') => {
+            const aggregation = filteredOrders.reduce((acc, order) => {
+                const group = order[key];
+                if (!group) return acc;
+                if (!acc[group]) {
+                    acc[group] = { revenue: 0, profit: 0, orders: 0, label: group };
                 }
-                acc[groupKey].revenue += order['Grand Total'];
-                acc[groupKey].orders += 1;
+                acc[group].revenue += order['Grand Total'];
                 const orderProfit = order['Grand Total'] - (order['Total Product Cost ($)'] || 0) - (order['Internal Cost'] || 0);
-                acc[groupKey].profit += orderProfit;
-                acc[groupKey].units += order.Products.reduce((sum, p) => sum + p.quantity, 0);
+                acc[group].profit += orderProfit;
+                acc[group].orders += 1;
                 return acc;
-            }, {} as Record<string, any>);
-            return Object.entries(results).map(([label, values]) => ({ label, ...values })).sort((a,b) => b.revenue - a.revenue);
+            }, {} as Record<string, { revenue: number, profit: number, orders: number, label: string }>);
+
+            return Object.values(aggregation).map(item => ({
+                ...item,
+                revenueFormatted: `$${item.revenue.toFixed(2)}`,
+                profitFormatted: `$${item.profit.toFixed(2)}`,
+            })).sort((a, b) => b.revenue - a.revenue);
         };
-        
-        const productsAggregated = filteredOrders
-            .flatMap(o => o.Products.map(p => ({ ...p, team: o.Team })))
+
+        const byProduct = filteredOrders
+            .flatMap(order => order.Products.map(p => ({ ...p, team: order.Team, user: order.User })))
             .reduce((acc, product) => {
+                const masterProduct: MasterProduct | undefined = appData.products?.find((mp: MasterProduct) => mp.ProductName === product.name);
                 if (!acc[product.name]) {
-                    acc[product.name] = { units: 0, revenue: 0 };
+                    acc[product.name] = { revenue: 0, profit: 0, quantity: 0, label: product.name, image: masterProduct?.ImageURL || '' };
                 }
-                acc[product.name].units += product.quantity;
                 acc[product.name].revenue += product.total;
+                const productProfit = product.total - (product.cost * product.quantity);
+                acc[product.name].profit += productProfit;
+                acc[product.name].quantity += product.quantity;
                 return acc;
-            }, {} as Record<string, any>);
+            }, {} as Record<string, { revenue: number, profit: number, quantity: number, label: string, image: string }>);
+            
+        const byShippingMethod = filteredOrders.reduce((acc, order) => {
+            const method = order['Internal Shipping Method'];
+            if (!method) return acc;
+            const methodInfo: ShippingMethod | undefined = appData.shippingMethods?.find((s: any) => s.MethodName === method);
+            if (!acc[method]) {
+                acc[method] = { label: method, cost: 0, orders: 0, logo: methodInfo?.LogosURL || '' };
+            }
+            acc[method].cost += (order['Internal Cost'] || 0);
+            acc[method].orders += 1;
+            return acc;
+        }, {} as Record<string, { label: string, cost: number, orders: number, logo: string }>);
+
+        const byDriver = filteredOrders.reduce((acc, order) => {
+            const methodInfo = appData.shippingMethods?.find((s: any) => s.MethodName === order['Internal Shipping Method']);
+            if (!methodInfo || !methodInfo.RequireDriverSelection) return acc;
+            const driver = order['Internal Shipping Details'];
+            if (!driver) return acc;
+            if (!acc[driver]) {
+                acc[driver] = { label: driver, cost: 0, orders: 0, shippingService: order['Internal Shipping Method'] };
+            }
+            acc[driver].cost += (order['Internal Cost'] || 0);
+            acc[driver].orders += 1;
+            return acc;
+        }, {} as Record<string, { label: string, cost: number, orders: number, shippingService: string }>);
+
 
         return {
-            revenue, profit, cost: totalInternalCost + totalProductCost, totalOrders, aov, profitMargin,
-            byTeam: aggregateBy('Team'),
-            byUser: aggregateBy('User'),
+            revenue,
+            profit,
+            totalOrders,
+            aov,
+            profitMargin,
             byPage: aggregateBy('Page'),
-            byLocation: aggregateBy('Location'),
-            byProduct: Object.entries(productsAggregated).map(([label, values]) => ({ label, ...values })).sort((a,b) => b.revenue - a.revenue),
+            byUser: aggregateBy('User'),
+            byProduct: Object.values(byProduct).map(item => ({...item, revenueFormatted: `$${item.revenue.toFixed(2)}`, profitFormatted: `$${item.profit.toFixed(2)}`})).sort((a, b) => b.revenue - a.revenue),
+            byTeam: aggregateBy('Team'),
+            byShippingMethod: Object.values(byShippingMethod).map(item => ({...item, costFormatted: `$${item.cost.toFixed(2)}`})).sort((a,b) => b.cost - a.cost),
+            byDriver: Object.values(byDriver).map(item => ({...item, costFormatted: `$${item.cost.toFixed(2)}`})).sort((a,b) => b.cost - a.cost),
         };
-    }, [filteredOrders]);
-
-    const dailyRevenueData = useMemo(() => {
-        if (filteredOrders.length === 0) return [];
-        const dailyData = filteredOrders.reduce((acc, order) => {
-            const date = new Date(order.Timestamp).toISOString().split('T')[0];
-            if (!acc[date]) acc[date] = 0;
-            acc[date] += order['Grand Total'];
-            return acc;
-        }, {} as Record<string, number>);
-        
-        return Object.entries(dailyData)
-            .map(([date, revenue]) => ({ label: date.split('-').slice(1).join('/'), value: revenue }))
-            .sort((a, b) => {
-                const [aMonth, aDay] = a.label.split('/').map(Number);
-                const [bMonth, bDay] = b.label.split('/').map(Number);
-                if (aMonth !== bMonth) return aMonth - bMonth;
-                return aDay - bDay;
-            });
-    }, [filteredOrders]);
-
-
-    const handleExport = () => {
-        if (filteredOrders.length === 0) {
-            alert("No data to export.");
-            return;
-        }
-        const headers = ["Order ID", "Timestamp", "User", "Team", "Page", "Customer Name", "Customer Phone", "Location", "Products", "Subtotal", "Shipping Fee", "Grand Total", "Internal Cost", "Total Product Cost", "Profit", "Payment Status"];
-        const rows = filteredOrders.map(o => [
-            o['Order ID'],
-            o.Timestamp,
-            o.User,
-            o.Team,
-            o.Page,
-            o['Customer Name'],
-            o['Customer Phone'],
-            o.Location,
-            o.Products.map(p => `${p.quantity}x ${p.name}`).join('; '),
-            o.Subtotal,
-            o['Shipping Fee (Customer)'],
-            o['Grand Total'],
-            o['Internal Cost'],
-            o['Total Product Cost ($)'],
-            o['Grand Total'] - (o['Internal Cost'] || 0) - (o['Total Product Cost ($)'] || 0),
-            o['Payment Status']
-        ].map(val => `"${String(val).replace(/"/g, '""')}"`)); // Quote all fields and escape quotes
-
-        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `sales_report_${new Date().toISOString().split('T')[0]}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-    };
+    }, [filteredOrders, appData]);
 
     const handleAnalyze = async () => {
         if (!geminiAi) {
@@ -268,11 +214,11 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
         setAnalysisResult('');
         setAnalysisError('');
         try {
-            const result = await analyzeReportData(geminiAi, reportData, filters);
+            const result = await analyzeReportData(geminiAi, reportData, {});
             setAnalysisResult(result);
         } catch (error) {
-            console.error("Gemini analysis failed:", error);
-            setAnalysisError("An error occurred while generating the analysis.");
+            console.error(error);
+            setAnalysisError("Failed to get analysis from Gemini.");
         } finally {
             setIsAnalyzing(false);
         }
@@ -281,159 +227,213 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
     const OverviewTab = () => (
         <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard 
-                    title="Total Revenue" 
-                    value={`$${reportData.revenue.toFixed(2)}`}
-                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>}
-                />
-                <StatCard 
-                    title="Total Orders" 
-                    value={reportData.totalOrders.toString()} 
-                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>}
-                />
-                <StatCard 
-                    title="Average Order Value" 
-                    value={`$${reportData.aov.toFixed(2)}`} 
-                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>}
-                />
-                <StatCard 
-                    title="Net Profit" 
-                    value={`$${reportData.profit.toFixed(2)}`} 
-                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>}
-                />
-            </div>
-            <div className="page-card">
-                 <SimpleBarChart data={dailyRevenueData} title="Daily Revenue" />
-            </div>
-            <div className="page-card">
-                <h3 className="text-xl font-bold text-white mb-4">AI-Powered Insights</h3>
-                <p className="text-sm text-gray-400 mb-4">Click "Analyze" in the control panel above to generate insights for the selected filters.</p>
-                {isAnalyzing && <div className="flex justify-center p-8"><Spinner /></div>}
-                {analysisError && <p className="text-red-400">{analysisError}</p>}
-                {analysisResult && (
-                     <div
-                        className="gemini-analysis prose prose-invert max-w-none prose-p:text-gray-300 prose-li:text-gray-300"
-                        dangerouslySetInnerHTML={{ __html: analysisResult.replace(/\n/g, '<br />') }}
-                    />
-                )}
-            </div>
-        </div>
-    );
-
-    const PerformanceTab = () => (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="page-card">
-                 <SimpleBarChart data={reportData.byProduct.slice(0, 10).map(p => ({label: p.label, value: p.revenue}))} title="Top 10 Products by Revenue" />
-            </div>
-             <div className="page-card">
-                <SimpleBarChart data={reportData.byPage.map(p => ({label: p.label, value: p.revenue}))} title="Revenue by Page" />
-            </div>
-            <DataTable className="lg:col-span-2" title="By Product" data={reportData.byProduct} columns={['Product', 'Units Sold', 'Revenue']} customMapping={{'Product': 'label', 'Units Sold': 'units'}} />
-            <DataTable className="lg:col-span-2" title="By User" data={reportData.byUser} columns={['User', 'Revenue', 'Orders', 'Profit']} customMapping={{'User': 'label'}} />
-        </div>
-    );
-    
-    const ProfitabilityTab = () => (
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard 
-                    title="Total Revenue" 
-                    value={`$${reportData.revenue.toFixed(2)}`} 
-                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>}
-                />
-                <StatCard 
-                    title="Total Cost" 
-                    value={`$${reportData.cost.toFixed(2)}`} 
-                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>}
-                />
-                <StatCard 
-                    title="Net Profit" 
-                    value={`$${reportData.profit.toFixed(2)}`} 
-                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>}
-                />
-                <StatCard 
-                    title="Profit Margin" 
-                    value={`${reportData.profitMargin.toFixed(2)}%`}
-                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>}
-                />
-            </div>
-            <div className="page-card">
-                 <SimpleBarChart data={reportData.byTeam.map(p => ({label: p.label, value: p.profit}))} title="Net Profit by Team" />
-            </div>
-            <DataTable title="Profit by Team" data={reportData.byTeam} columns={['Team', 'Revenue', 'Profit', 'Orders']} customMapping={{'Team': 'label'}} />
-        </div>
-    );
-    
-
-    return (
-        <div className="w-full">
-            <h1 className="text-3xl font-bold text-white mb-4">របាយការណ៍</h1>
-            <div className="report-tabs">
-                {(['overview', 'performance', 'profitability'] as ReportTab[]).map(tab => (
-                    <button key={tab} onClick={() => setActiveTab(tab)} className={`report-tab ${activeTab === tab ? 'active' : ''}`}>
-                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                    </button>
-                ))}
+                 <StatCardRedesigned title="Total Revenue" value={`$${reportData.revenue.toFixed(2)}`} change="+5.4%" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} />
+                <StatCardRedesigned title="Net Profit" value={`$${reportData.profit.toFixed(2)}`} change="-2.1%" changeType="decrease" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>} />
+                <StatCardRedesigned title="Total Orders" value={reportData.totalOrders.toString()} change="+12" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
+                <StatCardRedesigned title="Avg. Order Value" value={`$${reportData.aov.toFixed(2)}`} change="+1.5%" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4z" /></svg>} />
             </div>
 
-            <div className="page-card my-6">
-                <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 items-end">
-                    <div className="col-span-2 lg:col-span-4 xl:col-span-2">
-                        <label className="text-xs text-gray-400">Date Range</label>
-                        <select className="form-select" value={filters.datePreset} onChange={e => handleDatePresetChange(e.target.value as DateRangePreset)}>
-                            {datePresets.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                        </select>
-                    </div>
-                    {filters.datePreset === 'custom' && (
-                        <>
-                           <div>
-                                <label className="text-xs text-gray-400">Start Date</label>
-                                <input type="date" className="form-input" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} />
-                           </div>
-                           <div>
-                                <label className="text-xs text-gray-400">End Date</label>
-                                <input type="date" className="form-input" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} />
-                           </div>
-                        </>
-                    )}
-                     <div>
-                        <label className="text-xs text-gray-400">Team</label>
-                         <select className="form-select" value={filters.team} onChange={e => setFilters({...filters, team: e.target.value})}>
-                            <option value="">All Teams</option>
-                            {Array.from(new Set(appData.pages?.map((p: any) => p.Team))).map((t: any) => <option key={t} value={t}>{t}</option>)}
-                         </select>
-                     </div>
-                      <div>
-                        <label className="text-xs text-gray-400">User</label>
-                          <select className="form-select" value={filters.user} onChange={e => setFilters({...filters, user: e.target.value})}>
-                            <option value="">All Users</option>
-                            {appData.users?.map((u: User) => <option key={u.UserName} value={u.UserName}>{u.FullName}</option>)}
-                         </select>
-                      </div>
-                     <div>
-                        <label className="text-xs text-gray-400">Payment</label>
-                         <select className="form-select" value={filters.paymentStatus} onChange={e => setFilters({...filters, paymentStatus: e.target.value})}>
-                            <option value="">All Statuses</option>
-                            <option value="Paid">Paid</option>
-                            <option value="Unpaid">Unpaid</option>
-                         </select>
-                     </div>
-                     <div className="col-span-2 xl:col-span-2 flex items-end gap-2">
-                         <button onClick={handleExport} className="btn btn-secondary w-full">Export CSV</button>
-                         <GeminiButton onClick={handleAnalyze} isLoading={isAnalyzing} disabled={!geminiAi || filteredOrders.length === 0} className="w-full">
-                            Analyze
+            {geminiAi && (
+                <div className="page-card !bg-gray-800/60 mt-6">
+                    <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                        <h3 className="text-lg font-bold text-white">Gemini AI Analysis</h3>
+                        <GeminiButton onClick={handleAnalyze} isLoading={isAnalyzing}>
+                            Generate Insights
                         </GeminiButton>
-                     </div>
+                    </div>
+                    {isAnalyzing && <div className="flex justify-center"><Spinner /></div>}
+                    {analysisError && <p className="text-red-400">{analysisError}</p>}
+                    {analysisResult && (
+                        <div className="gemini-analysis whitespace-pre-wrap font-sans">
+                            {analysisResult}
+                        </div>
+                    )}
                 </div>
-            </div>
-
-            <div className="mt-6">
-                {activeTab === 'overview' && <OverviewTab />}
-                {activeTab === 'performance' && <PerformanceTab />}
-                {activeTab === 'profitability' && <ProfitabilityTab />}
-            </div>
+            )}
         </div>
     );
+
+    const PerformanceTab = () => {
+        const top10Products = useMemo(() => {
+            return reportData.byProduct.slice(0, 10).map(p => {
+                const productInfo: MasterProduct | undefined = appData.products.find((master: MasterProduct) => master.ProductName === p.label);
+                return {
+                    label: p.label,
+                    value: p.revenue,
+                    imageUrl: productInfo?.ImageURL || ''
+                }
+            });
+        }, [reportData.byProduct, appData.products]);
+
+        const top10Users = useMemo(() => reportData.byUser.slice(0, 10).map(u => ({ label: u.label, value: u.revenue })), [reportData.byUser]);
+        const top10Pages = useMemo(() => reportData.byPage.slice(0, 10).map(p => ({ label: p.label, value: p.revenue })), [reportData.byPage]);
+
+        return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="page-card !bg-gray-800/60"><SimpleBarChart data={top10Products} title="Top 10 Products by Revenue" /></div>
+                <div className="page-card !bg-gray-800/60"><SimpleBarChart data={top10Users} title="Top 10 Users by Revenue" /></div>
+                <div className="page-card !bg-gray-800/60 lg:col-span-2"><SimpleBarChart data={top10Pages} title="Top 10 Pages by Revenue" /></div>
+            </div>
+        );
+    };
+
+    const ProfitabilityTab = () => {
+        const [profitView, setProfitView] = useState<ProfitView>('product');
+        const [visibleColumns, setVisibleColumns] = useState(new Set(['label', 'revenueFormatted', 'profitFormatted', 'orders', 'quantity', 'image']));
+        
+        const toggleColumn = (key: string) => {
+            setVisibleColumns(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(key)) {
+                    newSet.delete(key);
+                } else {
+                    newSet.add(key);
+                }
+                return newSet;
+            });
+        };
+
+        const profitViews = [
+            { id: 'product', label: 'By Product' },
+            { id: 'page', label: 'By Page' },
+            { id: 'team', label: 'By Team' }
+        ];
+        
+        const columns = {
+            product: [
+                { key: 'image', label: 'Image', render: (val: string) => <img src={convertGoogleDriveUrl(val)} className="h-10 w-10 object-cover rounded" /> },
+                { key: 'label', label: 'Product' }, { key: 'revenueFormatted', label: 'Revenue' },
+                { key: 'profitFormatted', label: 'Profit' }, { key: 'quantity', label: 'Quantity' },
+            ],
+            page: [
+                { key: 'label', label: 'Page' }, { key: 'revenueFormatted', label: 'Revenue' },
+                { key: 'profitFormatted', label: 'Profit' }, { key: 'orders', label: 'Orders' },
+            ],
+            team: [
+                { key: 'label', label: 'Team' }, { key: 'revenueFormatted', label: 'Revenue' },
+                { key: 'profitFormatted', label: 'Profit' }, { key: 'orders', label: 'Orders' },
+            ]
+        };
+
+        return (
+            <div className="space-y-4">
+                 <div className="flex items-center space-x-2 bg-gray-800/50 p-1 rounded-lg self-start">
+                    {profitViews.map(view => (
+                        <button
+                            key={view.id}
+                            onClick={() => setProfitView(view.id as ProfitView)}
+                            className={`flex-1 text-sm font-semibold py-2 px-4 rounded-md transition-colors ${profitView === view.id ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:bg-gray-700/50'}`}
+                        >
+                            {view.label}
+                        </button>
+                    ))}
+                </div>
+                
+                {profitView === 'product' && <DataTable title="Profit by Product" data={reportData.byProduct} columns={columns.product} visibleColumns={visibleColumns} onColumnToggle={toggleColumn} className="!bg-gray-800/60" />}
+                {profitView === 'page' && <DataTable title="Profit by Page" data={reportData.byPage} columns={columns.page} visibleColumns={visibleColumns} onColumnToggle={toggleColumn} className="!bg-gray-800/60" />}
+                {profitView === 'team' && <DataTable title="Profit by Team" data={reportData.byTeam} columns={columns.team} visibleColumns={visibleColumns} onColumnToggle={toggleColumn} className="!bg-gray-800/60" />}
+            </div>
+        );
+    };
+
+    const ForecastingTab = () => {
+        const [isForecasting, setIsForecasting] = useState(false);
+        const [forecastResult, setForecastResult] = useState('');
+        const [forecastError, setForecastError] = useState('');
+
+        const handleForecast = async () => {
+             if (!geminiAi) {
+                setForecastError("Gemini AI is not configured.");
+                return;
+            }
+            setIsForecasting(true);
+            setForecastResult('');
+            setForecastError('');
+            try {
+                const result = await generateSalesForecast(geminiAi, allOrders);
+                setForecastResult(result);
+            } catch (error) {
+                console.error(error);
+                setForecastError("Failed to get forecast from Gemini.");
+            } finally {
+                setIsForecasting(false);
+            }
+        }
+        return (
+            <div className="page-card !bg-gray-800/60">
+                <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                    <h3 className="text-lg font-bold text-white">Gemini Sales Forecast</h3>
+                    <GeminiButton onClick={handleForecast} isLoading={isForecasting}>
+                        Generate Forecast
+                    </GeminiButton>
+                </div>
+                 {isForecasting && <div className="flex justify-center"><Spinner /></div>}
+                 {forecastError && <p className="text-red-400">{forecastError}</p>}
+                 {forecastResult && (
+                    <div className="gemini-analysis whitespace-pre-wrap font-sans">
+                        {forecastResult}
+                    </div>
+                )}
+                 {!forecastResult && !isForecasting && (
+                     <p className="text-gray-400 text-center py-8">Click the button to generate a sales forecast based on historical order data.</p>
+                 )}
+            </div>
+        );
+    };
+    
+    const ShippingTab = () => {
+        const [shippingView, setShippingView] = useState<ShippingCostView>('service');
+        const [visibleServiceCols, setVisibleServiceCols] = useState(new Set(['logo', 'label', 'costFormatted', 'orders']));
+        const [visibleDriverCols, setVisibleDriverCols] = useState(new Set(['label', 'shippingService', 'costFormatted', 'orders']));
+
+        const toggleServiceCol = (key: string) => setVisibleServiceCols(prev => {
+            const newSet = new Set(prev);
+            newSet.has(key) ? newSet.delete(key) : newSet.add(key);
+            return newSet;
+        });
+        const toggleDriverCol = (key: string) => setVisibleDriverCols(prev => {
+            const newSet = new Set(prev);
+            newSet.has(key) ? newSet.delete(key) : newSet.add(key);
+            return newSet;
+        });
+
+        const serviceColumns = [
+            { key: 'logo', label: 'Logo', render: (val: string) => <img src={convertGoogleDriveUrl(val)} className="h-8 w-12 object-contain bg-white/10 p-1 rounded" /> },
+            { key: 'label', label: 'Service' },
+            { key: 'costFormatted', label: 'Total Cost' },
+            { key: 'orders', label: 'Orders' },
+        ];
+        const driverColumns = [
+            { key: 'label', label: 'Driver' },
+            { key: 'shippingService', label: 'Shipping Service' },
+            { key: 'costFormatted', label: 'Total Cost' },
+            { key: 'orders', label: 'Orders' },
+        ];
+
+        return (
+            <div className="space-y-4">
+                <div className="flex items-center space-x-2 bg-gray-800/50 p-1 rounded-lg self-start">
+                    <button onClick={() => setShippingView('service')} className={`flex-1 text-sm font-semibold py-2 px-4 rounded-md transition-colors ${shippingView === 'service' ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:bg-gray-700/50'}`}>
+                        By Shipping Service
+                    </button>
+                    <button onClick={() => setShippingView('driver')} className={`flex-1 text-sm font-semibold py-2 px-4 rounded-md transition-colors ${shippingView === 'driver' ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:bg-gray-700/50'}`}>
+                        By Driver
+                    </button>
+                </div>
+                {shippingView === 'service' && <DataTable title="Costs by Shipping Service" data={reportData.byShippingMethod} columns={serviceColumns} visibleColumns={visibleServiceCols} onColumnToggle={toggleServiceCol} className="!bg-gray-800/60" />}
+                {shippingView === 'driver' && <DataTable title="Costs by Driver" data={reportData.byDriver} columns={driverColumns} visibleColumns={visibleDriverCols} onColumnToggle={toggleDriverCol} className="!bg-gray-800/60" />}
+            </div>
+        );
+    };
+
+    switch (reportType) {
+        case 'overview': return <OverviewTab />;
+        case 'performance': return <PerformanceTab />;
+        case 'profitability': return <ProfitabilityTab />;
+        case 'forecasting': return <ForecastingTab />;
+        case 'shipping': return <ShippingTab />;
+        default: return null;
+    }
 };
 
 export default ReportsView;
