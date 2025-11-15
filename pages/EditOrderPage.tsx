@@ -19,7 +19,18 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData(prev => {
+            const updatedState = { ...prev, [name]: value };
+    
+            // If shipping fee changes, we must recalculate totals in the same update.
+            if (name === 'Shipping Fee (Customer)') {
+                const newTotals = recalculateTotals(updatedState.Products, Number(value) || 0);
+                return { ...updatedState, ...newTotals };
+            }
+            
+            // For other inputs, just update the value.
+            return updatedState;
+        });
     };
 
     const recalculateTotals = (products: Product[], shippingFee: number): Partial<ParsedOrder> => {
@@ -56,7 +67,7 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
             productToUpdate.total = (productToUpdate.quantity || 0) * (productToUpdate.finalPrice || 0);
             newProducts[index] = productToUpdate;
 
-            const newTotals = recalculateTotals(newProducts, prev['Shipping Fee (Customer)']);
+            const newTotals = recalculateTotals(newProducts, Number(prev['Shipping Fee (Customer)']) || 0);
             return { ...prev, Products: newProducts, ...newTotals };
         });
     };
@@ -81,18 +92,10 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
         }
         setFormData(prev => {
             const newProducts = prev.Products.filter((_, i) => i !== index);
-            const newTotals = recalculateTotals(newProducts, prev['Shipping Fee (Customer)']);
+            const newTotals = recalculateTotals(newProducts, Number(prev['Shipping Fee (Customer)']) || 0);
             return { ...prev, Products: newProducts, ...newTotals };
         });
     };
-
-    useEffect(() => {
-        const newTotals = recalculateTotals(formData.Products, formData['Shipping Fee (Customer)']);
-        if (newTotals.Subtotal !== formData.Subtotal || newTotals['Grand Total'] !== formData['Grand Total']) {
-            setFormData(prev => ({...prev, ...newTotals}));
-        }
-    }, [formData['Shipping Fee (Customer)']]);
-
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -145,7 +148,7 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
         if (originalProductsJSON !== newProductsJSON) {
             changes['Products (JSON)'] = newProductsJSON;
             // When products change, totals must also be considered changed.
-            const newTotals = recalculateTotals(formData.Products, formData['Shipping Fee (Customer)']);
+            const newTotals = recalculateTotals(formData.Products, Number(formData['Shipping Fee (Customer)']) || 0);
             changes['Subtotal'] = newTotals.Subtotal;
             changes['Grand Total'] = newTotals['Grand Total'];
             changes['Total Product Cost ($)'] = newTotals['Total Product Cost ($)'];
@@ -188,7 +191,7 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
         }
     };
     
-    const profit = formData['Grand Total'] - (formData['Total Product Cost ($)'] || 0) - (formData['Internal Cost'] || 0);
+    const profit = (Number(formData['Grand Total']) || 0) - (Number(formData['Total Product Cost ($)']) || 0) - (Number(formData['Internal Cost']) || 0);
 
     return (
         <div className="w-full page-card animate-fade-in">
@@ -261,9 +264,9 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
 
                 {/* --- Totals --- */}
                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center p-4 bg-gray-900/50 rounded-lg">
-                    <div><strong className="text-gray-400 block">Subtotal</strong>${formData.Subtotal.toFixed(2)}</div>
-                    <div><strong className="text-gray-400 block">Total Cost</strong>${((formData['Total Product Cost ($)'] || 0) + (formData['Internal Cost'] || 0)).toFixed(2)}</div>
-                    <div><strong className="text-lg text-blue-300 block">Grand Total</strong><span className="text-xl font-bold">${formData['Grand Total'].toFixed(2)}</span></div>
+                    <div><strong className="text-gray-400 block">Subtotal</strong>${(Number(formData.Subtotal) || 0).toFixed(2)}</div>
+                    <div><strong className="text-gray-400 block">Total Cost</strong>${((Number(formData['Total Product Cost ($)']) || 0) + (Number(formData['Internal Cost']) || 0)).toFixed(2)}</div>
+                    <div><strong className="text-lg text-blue-300 block">Grand Total</strong><span className="text-xl font-bold">${(Number(formData['Grand Total']) || 0).toFixed(2)}</span></div>
                     <div><strong className="text-lg text-green-400 block">Est. Profit</strong><span className={`text-xl font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${profit.toFixed(2)}</span></div>
                 </div>
 
