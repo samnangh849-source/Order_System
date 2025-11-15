@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { User, MasterProduct } from './types';
@@ -212,12 +213,14 @@ const App: React.FC = () => {
         try {
             const staticResponse = await fetch(`${WEB_APP_URL}/api/static-data`);
             if (!staticResponse.ok) {
-                throw new Error(`Could not fetch static app data from server. Status: ${staticResponse.status}`);
+                const errorBody = await staticResponse.text();
+                throw new Error(`Could not fetch static app data from server. Status: ${staticResponse.status}, Body: ${errorBody}`);
             }
             
             const usersResponse = await fetch(`${WEB_APP_URL}/api/users`);
             if (!usersResponse.ok) {
-                throw new Error(`Could not fetch users data from server. Status: ${usersResponse.status}`);
+                const errorBody = await usersResponse.text();
+                throw new Error(`Could not fetch users data from server. Status: ${usersResponse.status}, Body: ${errorBody}`);
             }
 
             const staticResult = await staticResponse.json();
@@ -234,6 +237,8 @@ const App: React.FC = () => {
         } catch (error) {
             console.error("Data Fetching Error:", error);
 
+            const technicalDetails = error instanceof Error ? `\n\nTechnical Details: ${error.message}` : '';
+
             const userFriendlyMessage = "បញ្ហា Server (500) បានកើតឡើងនៅពេលទាញយកទិន្នន័យ។\n\n" +
                                       "បញ្ហានេះទំនងជាបណ្តាលមកពីបញ្ហាទិន្នន័យនៅក្នុង Google Sheets របស់អ្នក។\n\n" +
                                       "មូលហេតុទូទៅ:\n" +
@@ -246,13 +251,13 @@ const App: React.FC = () => {
             if (isCritical) {
                 setDataError({
                     title: "Critical Data Error / បញ្ហាទិន្នន័យធ្ងន់ធ្ងរ",
-                    message: `Could not load initial application data from the server. The application cannot start.\n\n${userFriendlyMessage}`,
+                    message: `Could not load initial application data from the server. The application cannot start.\n\n${userFriendlyMessage}${technicalDetails}`,
                     critical: true,
                 });
             } else {
                  setDataError({
                     title: "Data Fetching Warning / ការព្រមានអំពីការទាញទិន្នន័យ",
-                    message: `Failed to fetch the latest data. You are viewing cached data which might be outdated.\n\n${userFriendlyMessage}`,
+                    message: `Failed to fetch the latest data. You are viewing cached data which might be outdated.\n\n${userFriendlyMessage}${technicalDetails}`,
                     critical: false,
                 });
             }

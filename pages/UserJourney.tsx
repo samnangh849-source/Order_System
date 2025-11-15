@@ -22,9 +22,15 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
             try {
                 const response = await fetch(`${WEB_APP_URL}/api/admin/all-orders`);
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => null);
-                    const message = errorData?.message || `Server responded with status ${response.status}`;
-                    throw new Error(message);
+                    const errorText = await response.text();
+                    let errorMessage;
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        errorMessage = errorJson.message || errorText;
+                    } catch (e) {
+                        errorMessage = errorText || `Server responded with status ${response.status}`;
+                    }
+                    throw new Error(errorMessage);
                 }
 
                 const result = await response.json();

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useContext, useEffect, useMemo } from 'react';
 import { AppContext } from '../App';
 import Spinner from '../components/common/Spinner';
@@ -23,16 +24,15 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         try {
             const response = await fetch(`${WEB_APP_URL}/api/admin/all-orders`);
             if (!response.ok) {
-                let errorMessage = 'Failed to fetch orders from the server.';
+                const errorText = await response.text();
+                let errorMessage = `Server responded with status ${response.status}.`;
                 try {
-                    const errorData = await response.json();
-                    if (errorData && errorData.message) {
-                        errorMessage = `Server responded with an error: ${errorData.message}`;
-                    } else {
-                        errorMessage = `Server responded with status: ${response.status}`;
-                    }
+                    // Try to parse as JSON for structured errors from the Go backend
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.message || errorText;
                 } catch (e) {
-                    errorMessage = `Failed to fetch orders from the server. Status: ${response.status}`;
+                    // If not JSON, it could be a proxy error (HTML) or plain text
+                    errorMessage = errorText;
                 }
                 throw new Error(errorMessage);
             }
