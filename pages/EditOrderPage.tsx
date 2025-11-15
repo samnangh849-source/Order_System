@@ -159,65 +159,79 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
             setLoading(false);
             return;
         }
-
-        const changes: Record<string, any> = {};
-
-        // Compare simple fields and add to changes if they are different
-        const fieldsToCompare: (keyof ParsedOrder)[] = [
-            'Customer Name', 'Customer Phone', 'Location', 'Address Details', 'Note',
-            'Shipping Fee (Customer)', 'Internal Shipping Method',
-            'Internal Shipping Details', 'Internal Cost', 'Payment Status', 'Payment Info'
-        ];
         
-        fieldsToCompare.forEach(key => {
-            const originalValue = order[key];
-            let formValue = formData[key];
-            // Coerce to number if original is a number for accurate comparison
-            if (typeof originalValue === 'number') {
-                formValue = Number(formValue);
-            }
-            if (originalValue !== formValue) {
-                changes[key] = formValue;
-            }
-        });
-        
-        // Clean and compare products array
-        const cleanProduct = (p: Product) => ({
-            name: p.name,
-            quantity: Number(p.quantity),
-            originalPrice: Number(p.originalPrice),
-            finalPrice: Number(p.finalPrice),
-            total: Number(p.total),
-            discountPercent: Number(p.discountPercent),
-            colorInfo: p.colorInfo,
-            image: p.image,
-            cost: Number(p.cost)
+        const cleanAndStringifyProducts = (products: Product[]) => JSON.stringify(
+            products.map(p => ({
+                name: p.name,
+                quantity: Number(p.quantity),
+                finalPrice: Number(p.finalPrice),
+                colorInfo: p.colorInfo
+            }))
+        );
+
+        const originalDataSignature = JSON.stringify({
+            customerName: order['Customer Name'],
+            customerPhone: order['Customer Phone'],
+            location: order.Location,
+            address: order['Address Details'],
+            note: order.Note,
+            shippingFee: Number(order['Shipping Fee (Customer)']),
+            shippingMethod: order['Internal Shipping Method'],
+            shippingDetails: order['Internal Shipping Details'],
+            internalCost: Number(order['Internal Cost']),
+            paymentStatus: order['Payment Status'],
+            paymentInfo: order['Payment Info'],
+            products: cleanAndStringifyProducts(order.Products)
         });
 
-        const originalProductsJSON = JSON.stringify(order.Products.map(cleanProduct));
-        const newProductsJSON = JSON.stringify(formData.Products.map(cleanProduct));
-
-        if (originalProductsJSON !== newProductsJSON) {
-            changes['Products (JSON)'] = newProductsJSON;
-            // When products change, totals must also be considered changed.
-            const newTotals = recalculateTotals(formData.Products, Number(formData['Shipping Fee (Customer)']) || 0);
-            changes['Subtotal'] = newTotals.Subtotal;
-            changes['Grand Total'] = newTotals['Grand Total'];
-            changes['Total Product Cost ($)'] = newTotals['Total Product Cost ($)'];
-        }
-
-        if (Object.keys(changes).length === 0) {
+        const currentDataSignature = JSON.stringify({
+            customerName: formData['Customer Name'],
+            customerPhone: formData['Customer Phone'],
+            location: formData.Location,
+            address: formData['Address Details'],
+            note: formData.Note,
+            shippingFee: Number(formData['Shipping Fee (Customer)']),
+            shippingMethod: formData['Internal Shipping Method'],
+            shippingDetails: formData['Internal Shipping Details'],
+            internalCost: Number(formData['Internal Cost']),
+            paymentStatus: formData['Payment Status'],
+            paymentInfo: formData['Payment Info'],
+            products: cleanAndStringifyProducts(formData.Products)
+        });
+        
+        if (originalDataSignature === currentDataSignature) {
             setError("No changes were made.");
             setLoading(false);
             setTimeout(() => setError(''), 3000);
             return;
         }
         
+        const finalTotals = recalculateTotals(formData.Products, Number(formData['Shipping Fee (Customer)']) || 0);
+        const fullUpdatedOrder: any = { ...formData, ...finalTotals };
+
+        fullUpdatedOrder['Products (JSON)'] = JSON.stringify(
+            fullUpdatedOrder.Products.map((p: Product) => ({
+                name: p.name,
+                quantity: Number(p.quantity),
+                originalPrice: Number(p.originalPrice),
+                finalPrice: Number(p.finalPrice),
+                total: Number(p.total),
+                discountPercent: Number(p.discountPercent),
+                colorInfo: p.colorInfo,
+                image: p.image,
+                cost: Number(p.cost)
+            }))
+        );
+        delete fullUpdatedOrder.Products;
+
+        fullUpdatedOrder['Shipping Fee (Customer)'] = Number(fullUpdatedOrder['Shipping Fee (Customer)']) || 0;
+        fullUpdatedOrder['Internal Cost'] = Number(fullUpdatedOrder['Internal Cost']) || 0;
+
         const payload = {
             orderId: formData['Order ID'],
             team: formData.Team,
             userName: currentUser.UserName,
-            newData: changes
+            newData: fullUpdatedOrder
         };
 
         try {
@@ -233,7 +247,7 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
             }
             
             await refreshData();
-            onSave(formData); // Pass the full updated form data back to the parent
+            onSave(formData);
             
         } catch (err: any) {
             console.error("Update Error:", err);
