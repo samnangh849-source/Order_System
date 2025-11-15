@@ -7,12 +7,12 @@ import SearchableProductDropdown from '../components/common/SearchableProductDro
 
 interface EditOrderPageProps {
     order: ParsedOrder;
-    onSave: (updatedOrder: ParsedOrder) => void;
+    onSaveSuccess: () => void;
     onCancel: () => void;
 }
 
-const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }) => {
-    const { appData, refreshData, currentUser } = useContext(AppContext);
+const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onCancel }) => {
+    const { appData, currentUser } = useContext(AppContext);
     const [formData, setFormData] = useState<ParsedOrder>(order);
     const [loading, setLoading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -138,8 +138,7 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
                 throw new Error(errorMessage);
             }
             
-            await refreshData();
-            onSave(formData);
+            onSaveSuccess();
             
         } catch (err: any) {
             console.error("Delete Error:", err);
@@ -246,8 +245,7 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
                  throw new Error(result.message || 'Failed to update order. The server responded with an error.');
             }
             
-            await refreshData();
-            onSave(formData);
+            onSaveSuccess();
             
         } catch (err: any) {
             console.error("Update Error:", err);

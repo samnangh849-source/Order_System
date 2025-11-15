@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, useEffect, useMemo } from 'react';
 import { AppContext } from '../App';
 import Spinner from '../components/common/Spinner';
@@ -49,7 +48,7 @@ const FilterPanel = ({ isOpen, onClose, children }: { isOpen: boolean, onClose: 
 };
 
 const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
-    const { appData } = useContext(AppContext);
+    const { appData, refreshData } = useContext(AppContext);
     const [editingOrder, setEditingOrder] = useState<ParsedOrder | null>(null);
     const [allOrders, setAllOrders] = useState<ParsedOrder[]>([]);
     const [ordersLoading, setOrdersLoading] = useState(true);
@@ -222,9 +221,10 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         });
     }, [allOrders, filters]);
 
-    const handleSaveOrder = (updatedOrder: ParsedOrder) => {
+    const handleSaveSuccess = () => {
         setEditingOrder(null);
         fetchAllOrders();
+        refreshData();
     };
     
     const handleEditOrder = (order: ParsedOrder) => {
@@ -327,7 +327,7 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         }
         
         if (editingOrder) {
-            return <EditOrderPage order={editingOrder} onSave={handleSaveOrder} onCancel={() => setEditingOrder(null)} />;
+            return <EditOrderPage order={editingOrder} onSaveSuccess={handleSaveSuccess} onCancel={() => setEditingOrder(null)} />;
         }
 
         return <OrdersList orders={filteredOrders} onEdit={handleEditOrder} showActions={true} />;
