@@ -107,12 +107,14 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
         setError('');
 
         const payload = {
-            orderId: formData['Order ID'],
-            team: formData.Team,
+            sheetName: 'AllOrders',
+            primaryKey: {
+                'Order ID': formData['Order ID']
+            },
         };
 
         try {
-            const response = await fetch(`${WEB_APP_URL}/api/admin/delete-order`, {
+            const response = await fetch(`${WEB_APP_URL}/api/admin/delete-row`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -121,11 +123,9 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
             if (!response.ok) {
                 let errorMessage = `Failed to delete. Server responded with status ${response.status}.`;
                 try {
-                    // Try to parse a JSON error response from the server
                     const errorResult = await response.json();
                     errorMessage = errorResult.message || JSON.stringify(errorResult);
                 } catch (e) {
-                    // If JSON parsing fails, the body might be plain text
                     const textError = await response.text();
                     if (textError) {
                         errorMessage = textError;
@@ -134,10 +134,8 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
                 throw new Error(errorMessage);
             }
             
-            // On success (2xx status), we don't need to parse the body.
-            // This avoids errors if the server sends "OK" or an empty response.
             await refreshData();
-            onSave(formData); // This triggers a re-fetch in the parent and closes the edit view.
+            onSave(formData);
             
         } catch (err: any) {
             console.error("Delete Error:", err);
