@@ -144,7 +144,8 @@ export interface FullOrder {
     "Internal Cost": number;
     "Payment Status": string;
     "Payment Info": string;
-    "Telegram Message ID": string;
+    "Telegram Message ID 1": string;
+    "Telegram Message ID 2": string;
     Team: string;
     // --- NEW COLUMNS from Go Backend ---
     "Discount ($)": number;
