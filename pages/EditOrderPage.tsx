@@ -103,18 +103,22 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
             return;
         }
 
+        if (!currentUser) {
+            setError('Could not identify current user. Please log in again.');
+            return;
+        }
+
         setIsDeleting(true);
         setError('');
 
         const payload = {
-            sheetName: 'AllOrders',
-            primaryKey: {
-                'Order ID': formData['Order ID']
-            },
+            orderId: formData['Order ID'],
+            team: formData.Team,
+            userName: currentUser.UserName,
         };
 
         try {
-            const response = await fetch(`${WEB_APP_URL}/api/admin/delete-row`, {
+            const response = await fetch(`${WEB_APP_URL}/api/admin/delete-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
