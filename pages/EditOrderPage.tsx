@@ -158,6 +158,13 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onC
             setLoading(false);
             return;
         }
+
+        // NEW VALIDATION: Ensure the 'Team' field is present before sending the request.
+        if (!formData.Team) {
+            setError("Error: The order is missing 'Team' information, which is required for an update. Please check the data in the Google Sheet.");
+            setLoading(false);
+            return;
+        }
         
         const cleanAndStringifyProducts = (products: Product[]) => JSON.stringify(
             products.map(p => ({
@@ -240,9 +247,9 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onC
                 body: JSON.stringify(payload)
             });
 
-            const result = await response.json();
-            if (!response.ok || result.status !== 'success') {
-                 throw new Error(result.message || 'Failed to update order. The server responded with an error.');
+            if (!response.ok) {
+                const result = await response.json().catch(() => ({ message: 'Failed to parse error from server.'}));
+                throw new Error(result.message || 'Failed to update order. The server responded with an error.');
             }
             
             onSaveSuccess();
