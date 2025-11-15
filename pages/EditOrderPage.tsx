@@ -15,6 +15,7 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
     const { appData, refreshData, currentUser } = useContext(AppContext);
     const [formData, setFormData] = useState<ParsedOrder>(order);
     const [loading, setLoading] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState('');
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -95,6 +96,41 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
             const newTotals = recalculateTotals(newProducts, Number(prev['Shipping Fee (Customer)']) || 0);
             return { ...prev, Products: newProducts, ...newTotals };
         });
+    };
+    
+    const handleDelete = async () => {
+        if (!window.confirm(`តើអ្នកពិតជាចង់លុបប្រតិបត្តិការណ៍ ID: ${formData['Order ID']} មែនទេ? \n\nសកម្មភាពនេះមិនអាចមិនធ្វើវិញបានទេ។`)) {
+            return;
+        }
+
+        setIsDeleting(true);
+        setError('');
+
+        const payload = {
+            orderId: formData['Order ID'],
+            team: formData.Team,
+        };
+
+        try {
+            const response = await fetch(`${WEB_APP_URL}/api/admin/delete-order`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            if (!response.ok || result.status !== 'success') {
+                 throw new Error(result.message || 'Failed to delete order. The server responded with an error.');
+            }
+            
+            onSave(formData); // This will trigger a re-fetch in the parent and close the edit view.
+            
+        } catch (err: any) {
+            console.error("Delete Error:", err);
+            setError(`Delete failed: ${err.message}`);
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -272,11 +308,21 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
 
                 {error && <p className="text-red-400 mt-2 p-3 bg-red-900/50 rounded-md">{error}</p>}
 
-                <div className="flex justify-end pt-4 space-x-4 border-t border-gray-700 mt-6">
-                    <button type="button" onClick={onCancel} className="btn btn-secondary">Cancel</button>
-                    <button type="submit" className="btn btn-primary" disabled={loading}>
-                        {loading ? <Spinner size="sm" /> : 'Save Changes'}
+                <div className="flex justify-between items-center pt-4 space-x-4 border-t border-gray-700 mt-6">
+                    <button 
+                        type="button" 
+                        onClick={handleDelete} 
+                        className="btn !bg-red-600/80 hover:!bg-red-700 text-white"
+                        disabled={loading || isDeleting}
+                    >
+                        {isDeleting ? <Spinner size="sm" /> : 'លុបប្រតិបត្តិការណ៍'}
                     </button>
+                    <div className="flex space-x-4">
+                        <button type="button" onClick={onCancel} className="btn btn-secondary" disabled={loading || isDeleting}>Cancel</button>
+                        <button type="submit" className="btn btn-primary" disabled={loading || isDeleting}>
+                            {loading ? <Spinner size="sm" /> : 'Save Changes'}
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
