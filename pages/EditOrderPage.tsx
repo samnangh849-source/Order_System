@@ -118,12 +118,26 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSave, onCancel }
                 body: JSON.stringify(payload)
             });
 
-            const result = await response.json();
-            if (!response.ok || result.status !== 'success') {
-                 throw new Error(result.message || 'Failed to delete order. The server responded with an error.');
+            if (!response.ok) {
+                let errorMessage = `Failed to delete. Server responded with status ${response.status}.`;
+                try {
+                    // Try to parse a JSON error response from the server
+                    const errorResult = await response.json();
+                    errorMessage = errorResult.message || JSON.stringify(errorResult);
+                } catch (e) {
+                    // If JSON parsing fails, the body might be plain text
+                    const textError = await response.text();
+                    if (textError) {
+                        errorMessage = textError;
+                    }
+                }
+                throw new Error(errorMessage);
             }
             
-            onSave(formData); // This will trigger a re-fetch in the parent and close the edit view.
+            // On success (2xx status), we don't need to parse the body.
+            // This avoids errors if the server sends "OK" or an empty response.
+            await refreshData();
+            onSave(formData); // This triggers a re-fetch in the parent and closes the edit view.
             
         } catch (err: any) {
             console.error("Delete Error:", err);
