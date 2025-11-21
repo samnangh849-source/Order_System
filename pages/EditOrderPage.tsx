@@ -21,15 +21,15 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onC
     const [error, setError] = useState('');
     const [bankLogo, setBankLogo] = useState<string>('');
 
-    // Initialize bank logo if paid
+    // Initialize bank logo on mount
     useEffect(() => {
-        if (formData['Payment Status'] === 'Paid' && formData['Payment Info']) {
-             const bankInfo = appData.bankAccounts?.find((b: any) => b.BankName === formData['Payment Info']);
+        if (order['Payment Status'] === 'Paid' && order['Payment Info']) {
+             const bankInfo = appData.bankAccounts?.find((b: any) => b.BankName === order['Payment Info']);
              if (bankInfo) {
                  setBankLogo(convertGoogleDriveUrl(bankInfo.LogoURL));
              }
         }
-    }, [formData['Payment Status'], formData['Payment Info'], appData.bankAccounts]);
+    }, [order, appData.bankAccounts]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -42,7 +42,7 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onC
                 return { ...updatedState, ...newTotals };
             }
             
-            // If Payment Status changes to Unpaid, clear Payment Info
+            // If Payment Status changes to Unpaid, clear Payment Info and Logo
             if (name === 'Payment Status' && value === 'Unpaid') {
                 updatedState['Payment Info'] = '';
                 setBankLogo('');
@@ -52,13 +52,11 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onC
         });
     };
 
-    const handleBankChange = (bankName: string) => {
-        const bankInfo = appData.bankAccounts?.find((b: any) => b.BankName === bankName) || null;
+    const handleBankChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const bankName = e.target.value;
+        const bankInfo = appData.bankAccounts?.find((b: any) => b.BankName === bankName);
         setBankLogo(bankInfo ? convertGoogleDriveUrl(bankInfo.LogoURL) : '');
-        setFormData(prev => ({
-            ...prev,
-            'Payment Info': bankName
-        }));
+        setFormData(prev => ({ ...prev, 'Payment Info': bankName }));
     };
 
     const recalculateTotals = (products: Product[], shippingFee: number): Partial<ParsedOrder> => {
@@ -142,6 +140,7 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onC
             orderId: formData['Order ID'],
             team: formData.Team,
             userName: currentUser.UserName,
+            telegramMessageIds: [formData['Telegram Message ID 1'], formData['Telegram Message ID 2']].filter(Boolean)
         };
 
         try {
@@ -354,20 +353,12 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onC
                             <option value="Unpaid">Unpaid</option>
                             <option value="Paid">Paid</option>
                         </select>
-                        
                         {formData['Payment Status'] === 'Paid' ? (
                              <div className="flex items-center gap-2">
                                 <div className="relative flex-grow">
-                                    <select 
-                                        name="Payment Info" 
-                                        value={formData['Payment Info']} 
-                                        onChange={(e) => handleBankChange(e.target.value)} 
-                                        className="form-select"
-                                    >
-                                        <option value="">-- ជ្រើសរើសគណនី --</option>
-                                        {appData.bankAccounts?.map((b: any) => (
-                                            <option key={b.BankName} value={b.BankName}>{b.BankName} ({b.AccountName})</option>
-                                        ))}
+                                    <select name="Payment Info" value={formData['Payment Info']} onChange={handleBankChange} className="form-select">
+                                        <option value="">Select Bank</option>
+                                        {appData.bankAccounts?.map((b: any) => <option key={b.BankName} value={b.BankName}>{b.BankName} ({b.AccountName})</option>)}
                                     </select>
                                 </div>
                                 {bankLogo && (
@@ -375,7 +366,7 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onC
                                 )}
                              </div>
                         ) : (
-                            <input type="text" name="Payment Info" value={formData['Payment Info']} onChange={handleInputChange} className="form-input" placeholder="Payment Info (e.g., Bank Name)" />
+                             <input type="text" name="Payment Info" value={formData['Payment Info']} onChange={handleInputChange} className="form-input" placeholder="Payment Info (e.g., Bank Name)" />
                         )}
                     </fieldset>
                 </div>
