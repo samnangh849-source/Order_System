@@ -1,9 +1,11 @@
+
 import React, { useState, useContext, useEffect } from 'react';
 import { AppContext } from '../App';
 import Spinner from '../components/common/Spinner';
 import { ParsedOrder, Product, MasterProduct } from '../types';
 import { WEB_APP_URL } from '../constants';
 import SearchableProductDropdown from '../components/common/SearchableProductDropdown';
+import { convertGoogleDriveUrl } from '../utils/fileUtils';
 
 interface EditOrderPageProps {
     order: ParsedOrder;
@@ -17,6 +19,17 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onC
     const [loading, setLoading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState('');
+    const [bankLogo, setBankLogo] = useState<string>('');
+
+    // Initialize bank logo if paid
+    useEffect(() => {
+        if (formData['Payment Status'] === 'Paid' && formData['Payment Info']) {
+             const bankInfo = appData.bankAccounts?.find((b: any) => b.BankName === formData['Payment Info']);
+             if (bankInfo) {
+                 setBankLogo(convertGoogleDriveUrl(bankInfo.LogoURL));
+             }
+        }
+    }, [formData['Payment Status'], formData['Payment Info'], appData.bankAccounts]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -29,9 +42,23 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onC
                 return { ...updatedState, ...newTotals };
             }
             
-            // For other inputs, just update the value.
+            // If Payment Status changes to Unpaid, clear Payment Info
+            if (name === 'Payment Status' && value === 'Unpaid') {
+                updatedState['Payment Info'] = '';
+                setBankLogo('');
+            }
+            
             return updatedState;
         });
+    };
+
+    const handleBankChange = (bankName: string) => {
+        const bankInfo = appData.bankAccounts?.find((b: any) => b.BankName === bankName) || null;
+        setBankLogo(bankInfo ? convertGoogleDriveUrl(bankInfo.LogoURL) : '');
+        setFormData(prev => ({
+            ...prev,
+            'Payment Info': bankName
+        }));
     };
 
     const recalculateTotals = (products: Product[], shippingFee: number): Partial<ParsedOrder> => {
@@ -327,7 +354,29 @@ const EditOrderPage: React.FC<EditOrderPageProps> = ({ order, onSaveSuccess, onC
                             <option value="Unpaid">Unpaid</option>
                             <option value="Paid">Paid</option>
                         </select>
-                        <input type="text" name="Payment Info" value={formData['Payment Info']} onChange={handleInputChange} className="form-input" placeholder="Payment Info (e.g., Bank Name)" />
+                        
+                        {formData['Payment Status'] === 'Paid' ? (
+                             <div className="flex items-center gap-2">
+                                <div className="relative flex-grow">
+                                    <select 
+                                        name="Payment Info" 
+                                        value={formData['Payment Info']} 
+                                        onChange={(e) => handleBankChange(e.target.value)} 
+                                        className="form-select"
+                                    >
+                                        <option value="">-- ជ្រើសរើសគណនី --</option>
+                                        {appData.bankAccounts?.map((b: any) => (
+                                            <option key={b.BankName} value={b.BankName}>{b.BankName} ({b.AccountName})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {bankLogo && (
+                                    <img src={bankLogo} alt="Bank Logo" className="h-10 w-16 object-contain bg-white/10 p-1 rounded-md" />
+                                )}
+                             </div>
+                        ) : (
+                            <input type="text" name="Payment Info" value={formData['Payment Info']} onChange={handleInputChange} className="form-input" placeholder="Payment Info (e.g., Bank Name)" />
+                        )}
                     </fieldset>
                 </div>
                 
