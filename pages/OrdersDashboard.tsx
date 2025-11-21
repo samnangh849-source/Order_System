@@ -55,6 +55,7 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
     const [ordersError, setOrdersError] = useState('');
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
     const [dateRangeDisplay, setDateRangeDisplay] = useState('');
+    const [searchQuery, setSearchQuery] = useState(''); // NEW: Search query state
 
     const [filters, setFilters] = useState({
         datePreset: 'this_month' as DateRangePreset,
@@ -201,7 +202,7 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
     }, []);
 
     const filteredOrders = useMemo(() => {
-        return allOrders.filter(order => {
+        let ordersToFilter = allOrders.filter(order => {
             if (filters.datePreset !== 'all') {
                 const startDate = filters.startDate ? new Date(`${filters.startDate}T00:00:00`) : null;
                 const endDate = filters.endDate ? new Date(`${filters.endDate}T23:59:59`) : null;
@@ -219,7 +220,28 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
 
             return true;
         });
-    }, [allOrders, filters]);
+        
+        // NEW: Apply search query filter
+        if (searchQuery.trim()) {
+            const lowercasedQuery = searchQuery.toLowerCase().trim();
+            ordersToFilter = ordersToFilter.filter(order => {
+                const searchableFields = [
+                    order['Order ID'],
+                    order['Customer Name'],
+                    order['Customer Phone'],
+                    order.User,
+                    order.Page,
+                ].join(' ').toLowerCase();
+
+                const productsString = order.Products.map(p => p.name).join(' ').toLowerCase();
+
+                return searchableFields.includes(lowercasedQuery) || productsString.includes(lowercasedQuery);
+            });
+        }
+        
+        return ordersToFilter;
+
+    }, [allOrders, filters, searchQuery]);
 
     const handleSaveSuccess = () => {
         setEditingOrder(null);
@@ -374,13 +396,25 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
             {!editingOrder && (
                  <div className="page-card !p-3 mb-6">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                        <button onClick={() => setIsFilterModalOpen(true)} className="btn btn-secondary w-full md:w-auto self-start flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
-                            Filters & Options
-                        </button>
+                        <div className="w-full md:w-auto flex-shrink-0">
+                            <button onClick={() => setIsFilterModalOpen(true)} className="btn btn-secondary w-full md:w-auto flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
+                                Filters & Options
+                            </button>
+                        </div>
+                        <div className="relative w-full md:flex-1 md:max-w-md">
+                            <input
+                                type="text"
+                                placeholder="Search Order ID, Customer, Phone, Products..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="form-input !pl-10 w-full"
+                            />
+                            <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                        </div>
                         {dateRangeDisplay && (
-                            <p className="text-sm text-gray-400 text-center md:text-left bg-gray-900/50 p-2 rounded-md">
-                                <strong>Filtered Range:</strong> {dateRangeDisplay}
+                            <p className="text-sm text-gray-400 text-center md:text-right bg-gray-900/50 p-2 rounded-md whitespace-nowrap">
+                                <strong>Range:</strong> {dateRangeDisplay}
                             </p>
                         )}
                     </div>
