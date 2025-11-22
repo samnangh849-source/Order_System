@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useEffect, useMemo } from 'react';
 import { AppContext } from '../App';
 import Spinner from '../components/common/Spinner';
@@ -6,6 +7,7 @@ import EditOrderPage from './EditOrderPage';
 import OrdersList from '../components/orders/OrdersList';
 import { WEB_APP_URL } from '../constants';
 import Modal from '../components/common/Modal';
+import SearchableProductDropdown from '../components/common/SearchableProductDropdown';
 
 interface OrdersDashboardProps {
     onBack: () => void;
@@ -309,10 +311,12 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
                 </div>
                 <div>
                     <label className="input-label">Product</label>
-                    <select value={filters.product} onChange={e => handleFilterChange('product', e.target.value)} className="form-select">
-                        <option value="">All Products</option>
-                        {appData.products?.map((p: MasterProduct) => <option key={p.ProductName} value={p.ProductName}>{p.ProductName}</option>)}
-                    </select>
+                    <SearchableProductDropdown 
+                        products={appData.products || []}
+                        selectedProductName={filters.product}
+                        onSelect={(name) => handleFilterChange('product', name)}
+                        showTagEditor={false}
+                    />
                 </div>
                 <div>
                     <label className="input-label">Shipping Service</label>
