@@ -1,4 +1,3 @@
-
 import React from 'react';
 import * as ReactDOMClient from 'react-dom/client';
 import App from './App';
@@ -10,7 +9,8 @@ if (!rootElement) {
 }
 
 // Safely resolve createRoot from either named export (standard ESM) or default export (some bundles)
-const createRoot = ReactDOMClient.createRoot || (ReactDOMClient as any).default?.createRoot;
+// We check if ReactDOMClient exists before accessing properties to avoid Uncaught TypeError
+const createRoot = ReactDOMClient?.createRoot || (ReactDOMClient as any)?.default?.createRoot;
 
 if (!createRoot) {
     console.error("ReactDOMClient exports:", ReactDOMClient);
