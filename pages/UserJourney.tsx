@@ -151,21 +151,24 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
     // CASE 2: Team Selection (Multi-team user)
     if (userTeams.length > 1 && !selectedTeam) {
         return (
-             <div className="w-full max-w-5xl mx-auto p-4 pt-8 animate-fade-in">
+             <div className="w-full max-w-5xl mx-auto p-4 mt-10 md:mt-20 animate-fade-in">
                 <style>{`
                     .team-card:hover { transform: translateY(-5px); border-color: #3b82f6; }
                 `}</style>
                 
                 <div className="flex justify-start mb-8 relative z-10">
-                    <button 
-                        onClick={onBackToRoleSelect} 
-                        className="btn btn-secondary flex items-center gap-2 shadow-lg"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-                        </svg>
-                        <span>ត្រឡប់ទៅជ្រើសរើសតួនាទី (Back)</span>
-                    </button>
+                    {/* Only show Back button if user is System Admin */}
+                    {currentUser?.IsSystemAdmin && (
+                        <button 
+                            onClick={onBackToRoleSelect} 
+                            className="btn btn-secondary flex items-center gap-2 shadow-lg"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                            </svg>
+                            <span>ត្រឡប់ទៅជ្រើសរើសតួនាទី (Back)</span>
+                        </button>
+                    )}
                 </div>
 
                 <div className="text-center mb-10">
@@ -206,13 +209,15 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                 <div>
                     <div className="flex items-center gap-3 mb-2">
-                        {/* Only show Back button here if user has multiple teams OR is an admin (who might want to go back to role select) */}
-                        <button onClick={onBackToRoleSelect} className="btn btn-secondary !py-1 !px-2 text-xs flex items-center gap-1" title="Back to Role Selection">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-                            </svg>
-                            Back
-                        </button>
+                        {/* Only show Back button here if user is System Admin */}
+                        {currentUser?.IsSystemAdmin && (
+                            <button onClick={onBackToRoleSelect} className="btn btn-secondary !py-1 !px-2 text-xs flex items-center gap-1" title="Back to Role Selection">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                                </svg>
+                                Back
+                            </button>
+                        )}
                         <h1 className="text-2xl font-bold text-white">ការកម្មង់របស់ខ្ញុំ</h1>
                     </div>
                     

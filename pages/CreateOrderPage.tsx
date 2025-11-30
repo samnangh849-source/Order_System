@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AppContext } from '../App';
 import { Product as ProductType, MasterProduct, ShippingMethod, Driver, BankAccount } from '../types';
@@ -364,6 +365,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
     const [mapSearchUrl, setMapSearchUrl] = useState('');
     const [scanMode, setScanMode] = useState<'single' | 'increment'>('increment');
+    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     
     // --- START DRAFT SYSTEM LOGIC ---
     const DRAFT_KEY = useMemo(() => `createOrderDraft_${currentUser?.UserName}_${team}`, [currentUser, team]);
@@ -402,11 +404,14 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     }, [order, DRAFT_KEY]);
     // --- END DRAFT SYSTEM LOGIC ---
 
-    const handleCancel = () => {
-        if (window.confirm('តើអ្នកប្រាកដទេថាចង់បោះបង់? ទិន្នន័យដែលបានបញ្ចូលនឹងត្រូវល้างចោល។\nAre you sure you want to cancel? Your current draft will be cleared.')) {
-            localStorage.removeItem(DRAFT_KEY);
-            onCancel();
-        }
+    const handleCancelClick = () => {
+        setIsCancelModalOpen(true);
+    };
+
+    const handleConfirmCancel = () => {
+        localStorage.removeItem(DRAFT_KEY);
+        setIsCancelModalOpen(false);
+        onCancel();
     };
     
     const teamPages = useMemo(() => {
@@ -976,13 +981,14 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
         switch (currentStep) {
             case 1:
                 return (
-                    <fieldset className="border border-gray-600 p-4 rounded-lg animate-fade-in md:mt-10">
+                    <fieldset className="border border-gray-600 p-4 rounded-lg animate-fade-in">
                         <legend className="px-2 text-lg font-semibold text-blue-300">ព័ត៌មានអតិថិជន & Page</legend>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <select name="page" value={order.page} className="form-select" onChange={handlePageChange} required>
                                 <option value="">-- ជ្រើសរើស Page* --</option>
                                 {teamPages.map((p: any) => <option key={p.PageName} value={p.PageName}>{p.PageName}</option>)}
                             </select>
+                            <div></div>
                             <input type="text" name="name" value={order.customer.name} placeholder="ឈ្មោះអតិថិជន*" className="form-input" onChange={handleCustomerChange} required />
                             <div className="relative">
                                 <input 
@@ -1021,7 +1027,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
 
                              <div className="md:col-span-2">
                                 <label htmlFor="additionalLocation" className="block text-sm font-medium text-gray-400 mb-2">
-                                    ទីតាំងលម្អិត (ផ្ទះលេខ, ផ្លូវ)
+                                    ទីតាំងលម្អិត (ផ្ទះលេខ, ផ្លូវ) ឬ Link Google Map
                                 </label>
                                 <div className="flex items-center space-x-2">
                                     <input
@@ -1029,7 +1035,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                         id="additionalLocation"
                                         name="additionalLocation"
                                         value={order.customer.additionalLocation}
-                                        placeholder="បញ្ចូល លេខផ្ទះ, ផ្លូវ..."
+                                        placeholder="បិទភ្ជាប់ Link Map ឬបញ្ចូលទីតាំងលម្អិតនៅទីនេះ"
                                         className="form-input w-full"
                                         onChange={handleCustomerChange}
                                     />
@@ -1048,7 +1054,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
 
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-400 mb-2">ថ្លៃសេវាដឹកជញ្ជូន</label>
-                                <div className="flex items-center space-x-2">
+                                <div className="flex flex-row items-center gap-2">
                                     <button
                                         type="button"
                                         onClick={() => handleShippingOptionChange('charge')}
@@ -1225,9 +1231,9 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                 </div>
                                )})}
                         </div>
-                        <div className="flex items-center space-x-4 mt-6">
-                            <button type="button" onClick={addProduct} className="btn btn-secondary">បន្ថែមផលិតផល</button>
-                            <button type="button" onClick={() => setIsScannerVisible(true)} className="btn btn-secondary flex items-center" disabled={isScannerVisible}>
+                        <div className="flex flex-col sm:flex-row items-center gap-4 mt-6">
+                            <button type="button" onClick={addProduct} className="btn btn-secondary w-full sm:w-auto justify-center">បន្ថែមផលិតផល</button>
+                            <button type="button" onClick={() => setIsScannerVisible(true)} className="btn btn-secondary w-full sm:w-auto justify-center flex items-center" disabled={isScannerVisible}>
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M3 7V5a2 2 0 0 1 2-2h2" />
                                     <path d="M17 3h2a2 2 0 0 1 2 2v2" />
@@ -1400,7 +1406,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     };
 
     return (
-        <div className="w-full max-w-4xl mx-auto md:mt-8">
+        <div className="w-full max-w-4xl mx-auto md:mt-10 lg:mt-14 px-2 sm:px-0">
              <SubmissionStatusModal />
             <MapModal 
                 isOpen={isMapModalOpen}
@@ -1417,9 +1423,32 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                     masterProducts={appData.products || []}
                 />
             )}
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl md:text-3xl font-bold text-white">បង្កើតការកម្មង់ថ្មី (ក្រុម {team})</h1>
-                <button onClick={handleCancel} className="btn btn-secondary">បោះបង់</button>
+            
+            <Modal isOpen={isCancelModalOpen} onClose={() => setIsCancelModalOpen(false)} maxWidth="max-w-sm">
+                <div className="p-4 text-center">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-900/50 mb-4">
+                        <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-2">បញ្ជាក់ការបោះបង់</h3>
+                    <p className="text-gray-300 mb-6 text-sm">
+                        តើអ្នកប្រាកដទេថាចង់បោះបង់? ទិន្នន័យដែលបានបញ្ចូលនឹងត្រូវលុបចោល។
+                    </p>
+                    <div className="flex justify-center space-x-3">
+                        <button onClick={() => setIsCancelModalOpen(false)} className="btn btn-secondary flex-1">
+                            ទេ (រក្សាទុក)
+                        </button>
+                        <button onClick={handleConfirmCancel} className="btn !bg-red-600 hover:!bg-red-700 text-white flex-1">
+                            បាទ/ចាស (បោះបង់)
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <h1 className="text-xl md:text-3xl font-bold text-white leading-tight">បង្កើតការកម្មង់ថ្មី (ក្រុម {team})</h1>
+                <button onClick={handleCancelClick} className="btn btn-secondary w-full sm:w-auto">បោះបង់</button>
             </div>
              <style>{`
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -1457,14 +1486,14 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                 <div className="space-y-8 mt-8">
                     {renderStepContent()}
                     {error && <p className="text-red-400 mt-4 text-center bg-red-900/30 p-3 rounded-md">{error}</p>}
-                    <div className="flex justify-between pt-4 border-t border-gray-700">
-                        <button type="button" onClick={prevStep} className="btn btn-secondary" disabled={currentStep === 1 || loading}>ត្រឡប់ក្រោយ</button>
+                    <div className="flex justify-between pt-4 border-t border-gray-700 gap-4">
+                        <button type="button" onClick={prevStep} className="btn btn-secondary w-full sm:w-auto" disabled={currentStep === 1 || loading}>ត្រឡប់ក្រោយ</button>
                         {currentStep < STEPS.length ? (
-                            <button type="button" onClick={nextStep} className="btn btn-primary">
+                            <button type="button" onClick={nextStep} className="btn btn-primary w-full sm:w-auto">
                                 {currentStep === 3 ? 'ទៅកាន់ការផ្ទៀងផ្ទាត់' : 'បន្ត'}
                             </button>
                         ) : (
-                             <button type="button" onClick={submitOrder} className="btn btn-primary" disabled={loading}>
+                             <button type="button" onClick={submitOrder} className="btn btn-primary w-full sm:w-auto" disabled={loading}>
                                 {loading ? <Spinner size="sm" /> : 'បញ្ជូនការកម្មង់'}
                             </button>
                         )}
