@@ -1,18 +1,20 @@
 
 import React, { useState, useContext, useEffect, useMemo } from 'react';
 import { AppContext } from '../App';
-import { ParsedOrder, FullOrder } from '../types';
-import { WEB_APP_URL } from '../constants';
-import Spinner from '../components/common/Spinner';
+import { FullOrder, ParsedOrder } from '../types';
 import OrdersList from '../components/orders/OrdersList';
+import Spinner from '../components/common/Spinner';
 import CreateOrderPage from './CreateOrderPage';
-import { useUrlState } from '../hooks/useUrlState';
+import { WEB_APP_URL } from '../constants';
+
+interface UserJourneyProps {
+   onBackToRoleSelect: () => void;
+}
 
 const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
     const [orders, setOrders] = useState<ParsedOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
         const fetchOrders = async () => {
@@ -63,18 +65,6 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
         fetchOrders();
     }, [team]);
     
-    const filteredOrders = useMemo(() => {
-        if (!searchQuery.trim()) return orders;
-        const lowerQuery = searchQuery.toLowerCase().trim();
-        return orders.filter(o => 
-            o['Order ID'].toLowerCase().includes(lowerQuery) ||
-            o['Customer Name'].toLowerCase().includes(lowerQuery) ||
-            o['Customer Phone'].includes(lowerQuery) ||
-            (o.User && o.User.toLowerCase().includes(lowerQuery)) ||
-            (o.Products && o.Products.some(p => p.name.toLowerCase().includes(lowerQuery)))
-        );
-    }, [orders, searchQuery]);
-
     if (loading) return <div className="flex justify-center items-center h-64"><Spinner size="lg"/></div>;
     if (error) return <p className="text-center text-red-400 p-8">{error}</p>;
 
@@ -87,66 +77,121 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
         )
     }
 
-    return (
-        <div className="space-y-4">
-            <div className="relative max-w-md">
-                <input
-                    type="text"
-                    placeholder="ស្វែងរក (Order ID, ឈ្មោះ, លេខទូរស័ព្ទ)..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="form-input !pl-10"
-                />
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-            </div>
-            <OrdersList orders={filteredOrders} showActions={false} />
-        </div>
-    );
+    return <OrdersList orders={orders} showActions={false} />;
 };
 
-const UserJourney: React.FC = () => {
-    const { currentUser, appData } = useContext(AppContext);
-    // Use useUrlState for view ('list' | 'create') to enable browser back button
-    const [view, setView] = useUrlState<'list' | 'create'>('action', 'list');
-    const [selectedTeam, setSelectedTeam] = useState<string>('');
 
-    const userTeams = useMemo(() => {
-        if (!currentUser?.Team) return [];
-        return currentUser.Team.split(',').map(t => t.trim()).filter(Boolean);
-    }, [currentUser]);
+const UserJourney: React.FC<UserJourneyProps> = ({ onBackToRoleSelect }) => {
+    const { currentUser, setChatVisibility } = useContext(AppContext);
+    const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
+    const [view, setView] = useState<'main' | 'orders' | 'create_order'>('main');
 
     useEffect(() => {
-        if (userTeams.length > 0 && !selectedTeam) {
-            setSelectedTeam(userTeams[0]);
+        if (view === 'create_order') {
+            setChatVisibility(false);
+        } else {
+            setChatVisibility(true);
         }
-    }, [userTeams]);
+        // Cleanup function to reset visibility when component unmounts
+        return () => setChatVisibility(true);
+    }, [view, setChatVisibility]);
 
-    if (!selectedTeam) return <div className="p-4 text-center">No team assigned.</div>;
+    if (!currentUser) return null;
 
-    if (view === 'create') {
-        return <CreateOrderPage team={selectedTeam} onSaveSuccess={() => setView('list')} onCancel={() => setView('list')} />;
+    const teams = (currentUser.Team || '').split(',').map(t => t.trim()).filter(Boolean);
+
+    // Auto-select team if user is only in one
+    useEffect(() => {
+        if (teams.length === 1 && !selectedTeam) {
+            setSelectedTeam(teams[0]);
+        }
+    }, [teams, selectedTeam]);
+
+    const handleOrderCreated = () => {
+        // After order is "created", switch to the orders view to see it
+        // In a real app, you might want to refresh the orders data here
+        setView('orders');
     }
 
-    return (
-        <div className="w-full max-w-4xl mx-auto p-2 sm:p-4">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold text-white">ការកម្មង់របស់ខ្ញុំ ({selectedTeam})</h1>
-                {userTeams.length > 1 && (
-                    <select 
-                        value={selectedTeam} 
-                        onChange={(e) => setSelectedTeam(e.target.value)}
-                        className="form-select !w-auto ml-2"
-                    >
-                        {userTeams.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                )}
-                <button onClick={() => setView('create')} className="btn btn-primary">
-                    បង្កើតការកម្មង់
-                </button>
+    if (teams.length > 1 && !selectedTeam) {
+        return (
+             <div className="w-full max-w-4xl mx-auto page-card">
+                <h2 className="text-2xl font-bold text-center mb-8 text-white">សូមជ្រើសរើសក្រុមដើម្បីបន្ត</h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                    {teams.map(team => (
+                        <button key={team} onClick={() => setSelectedTeam(team)} className="selection-button">
+                            ក្រុម {team}
+                        </button>
+                    ))}
+                </div>
             </div>
-            <UserOrdersView team={selectedTeam} />
+        )
+    }
+    
+    if (!selectedTeam) {
+        // This case handles users with no assigned teams.
+        return (
+            <div className="w-full max-w-2xl mx-auto page-card text-center">
+                 <h2 className="text-2xl font-bold mb-4 text-white">Welcome, {currentUser.FullName}</h2>
+                 <p className="text-yellow-400">អ្នកមិនមានក្រុមទេ។ សូមទាក់ទង Admin។</p>
+            </div>
+        )
+    }
+    
+    if (view === 'create_order') {
+        return <CreateOrderPage team={selectedTeam} onSaveSuccess={handleOrderCreated} onCancel={() => setView('main')} />
+    }
+
+    if (view === 'orders') {
+        return (
+            <div className="w-full max-w-7xl mx-auto">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl md:text-3xl font-bold text-white">ប្រតិបត្តិការណ៍ក្រុម {selectedTeam}</h2>
+                    <button onClick={() => setView('main')} className="btn btn-secondary">ត្រឡប់</button>
+                </div>
+                <UserOrdersView team={selectedTeam} />
+            </div>
+        )
+    }
+
+
+    return (
+        <div className="w-full max-w-2xl mx-auto page-card">
+            <h2 className="text-2xl font-bold text-center mb-4 text-white">
+                សូមស្វាគមន៍, {currentUser.FullName}
+            </h2>
+            <p className="text-center text-gray-400 mb-8">
+                អ្នកកំពុងធ្វើការនៅក្នុងក្រុម <span className="font-bold text-blue-300">{selectedTeam}</span>
+            </p>
+            
+            <div className="space-y-8">
+                {/* Main Action */}
+                <div>
+                    <button onClick={() => setView('create_order')} className="selection-button">
+                        បង្កើតការកម្មង់ថ្មី
+                    </button>
+                </div>
+                
+                {/* Menu */}
+                <div className="border-t border-gray-600 pt-6">
+                    <h3 className="text-lg font-semibold text-center text-gray-400 mb-4">ម៉ឺនុយ</h3>
+                    <div className="space-y-3">
+                        <button onClick={() => setView('orders')} className="menu-button">
+                            មើលប្រតិបត្តិការណ៍ក្រុម
+                        </button>
+                        {/* Future menu items can be added here */}
+                    </div>
+                </div>
+            </div>
+
+
+            {teams.length > 1 && (
+                 <div className="text-center mt-8">
+                    <button onClick={() => { setSelectedTeam(null); setView('main'); }} className="btn btn-secondary">
+                        ប្តូរក្រុម
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

@@ -31,6 +31,7 @@ export interface AppContextType {
     setOriginalAdminUser: React.Dispatch<React.SetStateAction<User | null>>;
     fetchData: (force?: boolean) => Promise<void>;
     setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
+    setChatVisibility: (visible: boolean) => void;
 }
 
 export const AppContext = createContext<AppContextType>({} as AppContextType);
@@ -41,12 +42,12 @@ export default function App() {
     const [appData, setAppData] = useState<AppData>({} as AppData);
     
     // Use URL state for the main view to support back/forward buttons
-    // The state logic is now abstracted into this hook, making App.tsx cleaner
     const [appState, setAppState] = useUrlState<'login' | 'role_selection' | 'admin_dashboard' | 'user_journey'>('view', 'login');
     
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isChatOpen, setIsChatOpen] = useState(false);
+    const [isChatVisible, setChatVisible] = useState(true); // New state for chat visibility
     const [geminiAi, setGeminiAi] = useState<GoogleGenAI | null>(null);
     
     useEffect(() => {
@@ -56,7 +57,7 @@ export default function App() {
                 const session = JSON.parse(sessionString);
                 if (session.user) {
                     setCurrentUser(session.user);
-                    // The appState will be determined by the URL or default logic in checkSession/determineAppState
+                    // The appState will be determined by the URL or default logic in determineAppState
                 }
             } catch (e) {
                 console.error("Invalid session", e);
@@ -104,14 +105,13 @@ export default function App() {
     }, []);
 
     const determineAppState = useCallback((user: User, isImpersonating: boolean) => {
-        // If a view is already set in the URL (e.g. refresh), try to respect it if valid
+        // If a view is already set in the URL, try to respect it
         const params = new URLSearchParams(window.location.search);
         const currentView = params.get('view');
         
         if (currentView && ['role_selection', 'user_journey', 'admin_dashboard'].includes(currentView)) {
-             // Simple permission check
              if (currentView === 'admin_dashboard' && !user.IsSystemAdmin) {
-                 // Fall through to default logic if user tries to access admin without permission
+                 // Fall through if permission denied
              } else {
                  setAppState(currentView as any);
                  return;
@@ -138,8 +138,6 @@ export default function App() {
     useEffect(() => {
         if (currentUser) {
             fetchData();
-            // We only run determineAppState if we are currently in 'login' state (initial load/fresh login)
-            // or if the session was just restored.
             if (appState === 'login') {
                  determineAppState(currentUser, !!originalAdminUser);
             }
@@ -156,7 +154,7 @@ export default function App() {
     const logout = () => {
         setCurrentUser(null);
         setOriginalAdminUser(null);
-        setAppState('login'); // This will update the URL to ?view=login or remove it (if default)
+        setAppState('login');
         localStorage.removeItem('orderAppSession');
         localStorage.removeItem('originalAdminSession');
     };
@@ -197,12 +195,15 @@ export default function App() {
         });
     };
 
+    const setChatVisibility = (visible: boolean) => {
+        setChatVisible(visible);
+    };
+
     const previewImage = (url: string) => setPreviewImageUrl(url);
 
     const apiKey = appData.settings?.find((s: any) => s.SettingName === 'GOOGLE_MAPS_API_KEY')?.SettingValue || '';
 
     const renderContent = () => {
-        // Guard: If not logged in, always show login (even if URL says otherwise)
         if (!currentUser && appState !== 'login') {
              return <LoginPage />;
         }
@@ -211,7 +212,7 @@ export default function App() {
             case 'login': return <LoginPage />;
             case 'role_selection': return <RoleSelectionPage onSelect={(role) => setAppState(role)} />;
             case 'admin_dashboard': return <AdminDashboard />;
-            case 'user_journey': return <UserJourney />;
+            case 'user_journey': return <UserJourney onBackToRoleSelect={() => setAppState('role_selection')} />;
             default: return <LoginPage />;
         }
     };
@@ -234,7 +235,8 @@ export default function App() {
             setAppState,
             setOriginalAdminUser,
             fetchData,
-            setCurrentUser
+            setCurrentUser,
+            setChatVisibility
         }}>
             <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
                 {currentUser && appState !== 'login' && (
@@ -244,13 +246,15 @@ export default function App() {
                         <div className={`pt-16 ${originalAdminUser ? 'mt-10' : ''}`}>
                             {renderContent()}
                         </div>
-                         <button 
-                            className="fixed bottom-6 right-6 p-4 bg-blue-600 text-white rounded-full shadow-lg z-40 hover:bg-blue-700"
-                            onClick={() => setIsChatOpen(true)}
-                        >
-                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-                           {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadCount}</span>}
-                        </button>
+                        {isChatVisible && (
+                             <button 
+                                className="fixed bottom-6 right-6 p-4 bg-blue-600 text-white rounded-full shadow-lg z-40 hover:bg-blue-700"
+                                onClick={() => setIsChatOpen(true)}
+                            >
+                               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                               {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadCount}</span>}
+                            </button>
+                        )}
                         <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
                     </>
                 )}
