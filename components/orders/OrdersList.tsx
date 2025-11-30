@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useContext, useEffect } from 'react';
 import { ParsedOrder } from '../../types';
 import { AppContext } from '../../App';
@@ -30,7 +31,7 @@ const ColumnToggler = ({ columns, visibleColumns, onToggle }: { columns: { key: 
                 Columns
             </button>
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-gray-700 border border-gray-600 rounded-md shadow-lg z-20">
+                <div className="absolute right-0 mt-2 w-64 bg-gray-700 border border-gray-600 rounded-md shadow-lg z-20 max-h-80 overflow-y-auto">
                     {columns.map(col => (
                         <label key={col.key} className="flex items-center px-3 py-2 text-sm text-gray-200 hover:bg-gray-600 cursor-pointer">
                             <input
@@ -90,6 +91,12 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
                 </div>
             )},
             { key: 'User', label: 'User' },
+            // Added Shipping & Payment Columns
+            { key: 'Internal Shipping Method', label: 'សេវាដឹក' },
+            { key: 'Internal Shipping Details', label: 'អ្នកដឹក' },
+            { key: 'Internal Cost', label: 'ថ្លៃដឹក', render: (row: ParsedOrder) => `$${(Number(row['Internal Cost']) || 0).toFixed(2)}` },
+            { key: 'Payment Info', label: 'ធនាគារ' },
+            
             { key: 'Grand Total', label: 'សរុប', render: (row: ParsedOrder) => `$${row['Grand Total'].toFixed(2)}` },
             { key: 'Payment Status', label: 'ស្ថានភាព', render: (row: ParsedOrder) => (
                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${row['Payment Status'] === 'Paid' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
@@ -100,7 +107,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
         ];
 
         if (showActions) {
-            columns.splice(5, 0,
+            columns.splice(columns.findIndex(c => c.key === 'Grand Total'), 0,
                 { key: 'Total Product Cost ($)', label: 'តម្លៃដើមសរុប', render: (row: ParsedOrder) => `$${(row['Total Product Cost ($)'] || 0).toFixed(2)}` },
                 { key: 'profit', label: 'ចំណេញ', render: (row: ParsedOrder) => {
                     const profit = row['Grand Total'] - (row['Total Product Cost ($)'] || 0) - (row['Internal Cost'] || 0);

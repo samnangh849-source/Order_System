@@ -1,272 +1,123 @@
 
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, createContext, useCallback } from 'react';
+import { User, AppData, MasterProduct } from './types';
 import { GoogleGenAI } from "@google/genai";
-import { User, MasterProduct } from './types';
 import LoginPage from './pages/LoginPage';
-import AdminDashboard from './pages/AdminDashboard';
 import RoleSelectionPage from './pages/RoleSelectionPage';
+import AdminDashboard from './pages/AdminDashboard';
 import UserJourney from './pages/UserJourney';
 import Header from './components/common/Header';
 import ImpersonationBanner from './components/common/ImpersonationBanner';
-import Spinner from './components/common/Spinner';
-import { WEB_APP_URL } from './constants';
+import Modal from './components/common/Modal';
 import ChatWidget from './components/chat/ChatWidget';
-import DataErrorModal from './components/common/DataErrorModal'; // NEW IMPORT
+import { WEB_APP_URL } from './constants';
+import { useUrlState } from './hooks/useUrlState';
 
-declare global {
-    interface Window {
-        Html5Qrcode: any;
-    }
-}
-
-export const AppContext = React.createContext<{
+export interface AppContextType {
     currentUser: User | null;
-    originalAdminUser: User | null;
-    appData: any;
+    appData: AppData;
     login: (user: User) => void;
     logout: () => void;
-    loginAs: (targetUser: User) => void;
-    returnToAdmin: () => void;
     refreshData: () => Promise<void>;
-    updateCurrentUser: (updatedData: Partial<User>) => void;
-    updateProductInData: (productName: string, updatedProductData: Partial<MasterProduct>) => void;
-    geminiAi: GoogleGenAI | null;
-    apiKey: string | null;
-    isChatVisible: boolean;
-    setChatVisibility: (visible: boolean) => void;
+    originalAdminUser: User | null;
+    returnToAdmin: () => void;
     previewImage: (url: string) => void;
+    updateCurrentUser: (updatedData: Partial<User>) => void;
     setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
-}>({
-    currentUser: null,
-    originalAdminUser: null,
-    appData: {},
-    login: () => {},
-    logout: () => {},
-    loginAs: () => {},
-    returnToAdmin: () => {},
-    refreshData: async () => {},
-    updateCurrentUser: () => {},
-    updateProductInData: () => {},
-    geminiAi: null,
-    apiKey: null,
-    isChatVisible: true,
-    setChatVisibility: () => {},
-    previewImage: () => {},
-    setUnreadCount: () => {},
-});
+    geminiAi: GoogleGenAI | null;
+    updateProductInData: (productName: string, newData: Partial<MasterProduct>) => void;
+    apiKey: string;
+    setAppState: (newState: 'login' | 'role_selection' | 'admin_dashboard' | 'user_journey') => void;
+    setOriginalAdminUser: React.Dispatch<React.SetStateAction<User | null>>;
+    fetchData: (force?: boolean) => Promise<void>;
+    setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
+}
 
-const ImagePreviewModal: React.FC<{ imageUrl: string | null; onClose: () => void }> = ({ imageUrl, onClose }) => {
-    if (!imageUrl) return null;
+export const AppContext = createContext<AppContextType>({} as AppContextType);
 
-    const handleDownload = (e: React.MouseEvent) => {
-        e.preventDefault();
-        fetch(imageUrl)
-            .then(response => response.blob())
-            .then(blob => {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                const name = imageUrl.substring(imageUrl.lastIndexOf('/') + 1).split('?')[0] || 'image.jpg';
-                a.download = name;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                a.remove();
-            })
-            .catch(() => alert('Could not download image.'));
-    };
-
-    return (
-        <div 
-            className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[9999] p-4 animate-fade-in"
-            onClick={onClose}
-        >
-            <div
-                className="relative max-w-4xl max-h-[90vh]"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <img src={imageUrl} alt="Preview" className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" />
-                <div className="absolute top-2 right-2 flex gap-2">
-                     <a
-                        href={imageUrl}
-                        onClick={handleDownload}
-                        className="p-2 bg-gray-800/80 text-white rounded-full hover:bg-gray-700 transition-colors"
-                        title="Download Image"
-                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                    </a>
-                    <button 
-                        onClick={onClose} 
-                        className="p-2 bg-gray-800/80 text-white rounded-full hover:bg-gray-700 transition-colors"
-                        title="Close"
-                    >
-                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                         </svg>
-                    </button>
-                </div>
-            </div>
-             <style>{`
-                @keyframes fade-in {
-                    from { opacity: 0; }
-                    to { opacity: 1; }
-                }
-                .animate-fade-in { animation: fade-in 0.2s forwards; }
-            `}</style>
-        </div>
-    );
-};
-
-
-const App: React.FC = () => {
+export default function App() {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [originalAdminUser, setOriginalAdminUser] = useState<User | null>(null);
-    const [appData, setAppData] = useState<any>({});
-    const [loading, setLoading] = useState<boolean>(true);
-    const [appState, setAppState] = useState<'login' | 'role_selection' | 'user_journey' | 'admin_dashboard'>('login');
-    const [geminiAi, setGeminiAi] = useState<GoogleGenAI | null>(null);
-    const [apiKey, setApiKey] = useState<string | null>(null);
-    const [isChatOpen, setIsChatOpen] = useState(false);
-    const [isChatVisible, setIsChatVisible] = useState(true);
+    const [appData, setAppData] = useState<AppData>({} as AppData);
+    
+    // Use URL state for the main view to support back/forward buttons
+    // The state logic is now abstracted into this hook, making App.tsx cleaner
+    const [appState, setAppState] = useUrlState<'login' | 'role_selection' | 'admin_dashboard' | 'user_journey'>('view', 'login');
+    
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
     const [unreadCount, setUnreadCount] = useState(0);
-    const [dataError, setDataError] = useState<{ title: string; message: string; critical: boolean } | null>(null); // NEW STATE
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [geminiAi, setGeminiAi] = useState<GoogleGenAI | null>(null);
     
     useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            const flare = document.querySelector('.flare-light');
-            if (flare) {
-                (flare as HTMLElement).style.setProperty('--x', `${e.clientX}px`);
-                (flare as HTMLElement).style.setProperty('--y', `${e.clientY}px`);
-            }
-        };
-        window.addEventListener('mousemove', handleMouseMove);
-        return () => window.removeEventListener('mousemove', handleMouseMove);
-    }, []);
-
-    useEffect(() => {
-        const handleEsc = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                setPreviewImageUrl(null);
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-        return () => window.removeEventListener('keydown', handleEsc);
-    }, []);
-
-    useEffect(() => {
-        const isAdminView = appState === 'admin_dashboard';
-        if (isAdminView) {
-            document.body.classList.add('admin-view');
-        } else {
-            document.body.classList.remove('admin-view');
-        }
-        // Cleanup on appState change or unmount
-        return () => {
-            document.body.classList.remove('admin-view');
-        };
-    }, [appState]);
-
-    const logout = useCallback(() => {
-        localStorage.removeItem('orderAppSession');
-        localStorage.removeItem('originalAdminSession');
-        localStorage.removeItem('appDataCache');
-        setCurrentUser(null);
-        setOriginalAdminUser(null);
-        setAppData({});
-        setAppState('login');
-        setDataError(null); // Clear any errors on logout
-    }, []);
-
-    const fetchData = useCallback(async (forceRefresh = false) => {
-        setLoading(true);
-        const CACHE_KEY = 'appDataCache';
-        const CACHE_DURATION = 3600 * 1000; // 1 hour
-
-        const cachedDataString = localStorage.getItem(CACHE_KEY);
-        let cachedDataJson: any = null;
-        if (cachedDataString) {
+        const sessionString = localStorage.getItem('orderAppSession');
+        if (sessionString) {
             try {
-                cachedDataJson = JSON.parse(cachedDataString);
+                const session = JSON.parse(sessionString);
+                if (session.user) {
+                    setCurrentUser(session.user);
+                    // The appState will be determined by the URL or default logic in checkSession/determineAppState
+                }
             } catch (e) {
-                console.error("Failed to parse cache", e);
-                localStorage.removeItem(CACHE_KEY); // Clear corrupted cache
+                console.error("Invalid session", e);
+                localStorage.removeItem('orderAppSession');
             }
         }
+    }, []);
 
-        const isCacheFresh = cachedDataJson && (new Date().getTime() - cachedDataJson.timestamp < CACHE_DURATION);
-
-        if (isCacheFresh && !forceRefresh) {
-            setAppData(cachedDataJson.data);
-            setLoading(false);
-            return;
-        }
-
-        if (cachedDataJson) {
-            setAppData(cachedDataJson.data);
+    const fetchData = useCallback(async (force = false) => {
+        const cacheKey = 'appDataCache';
+        const cached = localStorage.getItem(cacheKey);
+        if (!force && cached) {
+            try {
+                const { data, timestamp } = JSON.parse(cached);
+                if (Date.now() - timestamp < 5 * 60 * 1000) { 
+                    setAppData(data);
+                    const apiKeySetting = data.settings?.find((s: any) => s.SettingName === 'GEMINI_API_KEY');
+                    if (apiKeySetting?.SettingValue) {
+                         const ai = new GoogleGenAI({ apiKey: apiKeySetting.SettingValue });
+                         setGeminiAi(ai);
+                    }
+                    return;
+                }
+            } catch (e) {}
         }
 
         try {
-            const staticResponse = await fetch(`${WEB_APP_URL}/api/static-data`);
-            if (!staticResponse.ok) {
-                const errorBody = await staticResponse.text();
-                throw new Error(`Could not fetch static app data from server. Status: ${staticResponse.status}, Body: ${errorBody}`);
+            const response = await fetch(`${WEB_APP_URL}/api/static-data`);
+            if (response.ok) {
+                const result = await response.json();
+                if (result.status === 'success') {
+                    setAppData(result.data);
+                    localStorage.setItem(cacheKey, JSON.stringify({ data: result.data, timestamp: Date.now() }));
+                    
+                    const apiKeySetting = result.data.settings?.find((s: any) => s.SettingName === 'GEMINI_API_KEY');
+                    if (apiKeySetting?.SettingValue) {
+                        const ai = new GoogleGenAI({ apiKey: apiKeySetting.SettingValue });
+                        setGeminiAi(ai);
+                    }
+                }
             }
-            
-            const usersResponse = await fetch(`${WEB_APP_URL}/api/users`);
-            if (!usersResponse.ok) {
-                const errorBody = await usersResponse.text();
-                throw new Error(`Could not fetch users data from server. Status: ${usersResponse.status}, Body: ${errorBody}`);
-            }
-
-            const staticResult = await staticResponse.json();
-            const usersResult = await usersResponse.json();
-
-            if (staticResult.status !== 'success' || usersResult.status !== 'success') {
-                throw new Error('Failed to parse app data.');
-            }
-
-            const combinedData = { ...staticResult.data, users: usersResult.data };
-            setAppData(combinedData);
-            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: combinedData, timestamp: new Date().getTime() }));
-            setDataError(null); // Clear error on successful fetch
-        } catch (error) {
-            console.error("Data Fetching Error:", error);
-
-            const technicalDetails = error instanceof Error ? `\n\nTechnical Details: ${error.message}` : '';
-
-            const userFriendlyMessage = "បញ្ហា Server (500) បានកើតឡើងនៅពេលទាញយកទិន្នន័យ។\n\n" +
-                                      "បញ្ហានេះទំនងជាបណ្តាលមកពីបញ្ហាទិន្នន័យនៅក្នុង Google Sheets របស់អ្នក។\n\n" +
-                                      "មូលហេតុទូទៅ:\n" +
-                                      "- មានអក្សរនៅក្នុងជួរឈរដែលគួរតែជាលេខ (ឧ. 'Price', 'Cost')។\n" +
-                                      "- ឈ្មោះ Sheet ឬឈ្មោះជួរឈរ (Header) ត្រូវបានផ្លាស់ប្តូរ។\n\n" +
-                                      "សូមពិនិត្យមើលទិន្នន័យក្នុង Sheets របស់អ្នក រួចព្យាយាមម្តងទៀត។";
-            
-            const isCritical = !cachedDataJson;
-
-            if (isCritical) {
-                setDataError({
-                    title: "Critical Data Error / បញ្ហាទិន្នន័យធ្ងន់ធ្ងរ",
-                    message: `Could not load initial application data from the server. The application cannot start.\n\n${userFriendlyMessage}${technicalDetails}`,
-                    critical: true,
-                });
-            } else {
-                 setDataError({
-                    title: "Data Fetching Warning / ការព្រមានអំពីការទាញទិន្នន័យ",
-                    message: `Failed to fetch the latest data. You are viewing cached data which might be outdated.\n\n${userFriendlyMessage}${technicalDetails}`,
-                    critical: false,
-                });
-            }
-        } finally {
-            setLoading(false);
+        } catch (e) {
+            console.error("Failed to fetch data", e);
         }
-    }, [logout]);
+    }, []);
 
     const determineAppState = useCallback((user: User, isImpersonating: boolean) => {
+        // If a view is already set in the URL (e.g. refresh), try to respect it if valid
+        const params = new URLSearchParams(window.location.search);
+        const currentView = params.get('view');
+        
+        if (currentView && ['role_selection', 'user_journey', 'admin_dashboard'].includes(currentView)) {
+             // Simple permission check
+             if (currentView === 'admin_dashboard' && !user.IsSystemAdmin) {
+                 // Fall through to default logic if user tries to access admin without permission
+             } else {
+                 setAppState(currentView as any);
+                 return;
+             }
+        }
+
         if (isImpersonating) {
             setAppState('user_journey');
             return;
@@ -282,85 +133,32 @@ const App: React.FC = () => {
         } else {
             setAppState('user_journey');
         }
-    }, []);
-
-    const checkSession = useCallback(async () => {
-        setLoading(true);
-        try {
-            const originalAdminSessionString = localStorage.getItem('originalAdminSession');
-            const sessionDataString = localStorage.getItem('orderAppSession');
-
-            if (sessionDataString) {
-                const sessionData = JSON.parse(sessionDataString);
-                const now = new Date().getTime();
-                const sevenDaysInMillis = 7 * 24 * 60 * 60 * 1000;
-
-                if (now - sessionData.timestamp > sevenDaysInMillis) {
-                    logout();
-                } else {
-                    const user = sessionData.user;
-                    setCurrentUser(user);
-                    await fetchData();
-                    let isImpersonating = false;
-                    if (originalAdminSessionString) {
-                        setOriginalAdminUser(JSON.parse(originalAdminSessionString).user);
-                        isImpersonating = true;
-                    }
-                    determineAppState(user, isImpersonating);
-                }
-            } else {
-                setLoading(false); // No session, stop loading to show login page
-            }
-        } catch (error) {
-            console.error("Session check failed:", error);
-            logout(); // Clear corrupted session
-        }
-    }, [fetchData, determineAppState, logout]);
+    }, [setAppState]);
 
     useEffect(() => {
-        checkSession();
-        
-        let key: string | undefined;
-        try {
-            if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-                key = process.env.API_KEY;
+        if (currentUser) {
+            fetchData();
+            // We only run determineAppState if we are currently in 'login' state (initial load/fresh login)
+            // or if the session was just restored.
+            if (appState === 'login') {
+                 determineAppState(currentUser, !!originalAdminUser);
             }
-        } catch (e) {
-            console.warn('`process.env` is not available. This is normal for static hosting.');
         }
+    }, [currentUser, fetchData, determineAppState, appState, originalAdminUser]);
 
-        if (key && key !== "YOUR_GEMINI_API_KEY") {
-             setApiKey(key);
-             setGeminiAi(new GoogleGenAI({apiKey: key}));
-        } else {
-            console.warn("Gemini API key is not configured. AI features will be disabled.");
-        }
-    }, [checkSession]);
 
     const login = (user: User) => {
-        const sessionData = { user, timestamp: new Date().getTime() };
-        localStorage.setItem('orderAppSession', JSON.stringify(sessionData));
         setCurrentUser(user);
-        fetchData(true).then(() => {
-            // Only determine app state if there was no critical fetch error
-            if (!dataError || !dataError.critical) {
-                determineAppState(user, false);
-            }
-        });
+        localStorage.setItem('orderAppSession', JSON.stringify({ user, timestamp: Date.now() }));
+        determineAppState(user, false);
     };
-    
-    const loginAs = (targetUser: User) => {
-        if (!currentUser || !currentUser.IsSystemAdmin) return;
-        
-        const adminSession = { user: currentUser, timestamp: new Date().getTime() };
-        localStorage.setItem('originalAdminSession', JSON.stringify(adminSession));
-        
-        const userSession = { user: targetUser, timestamp: new Date().getTime() };
-        localStorage.setItem('orderAppSession', JSON.stringify(userSession));
-        
-        setOriginalAdminUser(currentUser);
-        setCurrentUser(targetUser);
-        setAppState('user_journey');
+
+    const logout = () => {
+        setCurrentUser(null);
+        setOriginalAdminUser(null);
+        setAppState('login'); // This will update the URL to ?view=login or remove it (if default)
+        localStorage.removeItem('orderAppSession');
+        localStorage.removeItem('originalAdminSession');
     };
 
     const returnToAdmin = () => {
@@ -377,6 +175,7 @@ const App: React.FC = () => {
     };
 
     const refreshData = async () => {
+        localStorage.removeItem('appDataCache');
         await fetchData(true);
     };
 
@@ -384,107 +183,87 @@ const App: React.FC = () => {
         if (currentUser) {
             const newUser = { ...currentUser, ...updatedData };
             setCurrentUser(newUser);
-            const sessionData = { user: newUser, timestamp: new Date().getTime() };
-            localStorage.setItem('orderAppSession', JSON.stringify(sessionData));
+            localStorage.setItem('orderAppSession', JSON.stringify({ user: newUser, timestamp: Date.now() }));
         }
     };
     
-    const updateProductInData = (productName: string, updatedProductData: Partial<MasterProduct>) => {
-        setAppData(prevAppData => {
-            if (!prevAppData.products) {
-                console.warn('Attempted to update product, but appData.products is not available.');
-                return prevAppData;
-            }
-
-            const productIndex = prevAppData.products.findIndex((p: MasterProduct) => p.ProductName === productName);
-
-            if (productIndex === -1) {
-                console.warn(`Product "${productName}" not found for in-memory update.`);
-                return prevAppData;
-            }
-
-            const newProducts = [...prevAppData.products];
-            newProducts[productIndex] = { ...newProducts[productIndex], ...updatedProductData };
-            
-            const newAppData = { ...prevAppData, products: newProducts };
-
-            // Also update the local storage cache
-            localStorage.setItem('appDataCache', JSON.stringify({ data: newAppData, timestamp: new Date().getTime() }));
-
-            return newAppData;
+    const updateProductInData = (productName: string, newData: Partial<MasterProduct>) => {
+        setAppData(prev => {
+            if (!prev.products) return prev;
+            const updatedProducts = prev.products.map(p => 
+                p.ProductName === productName ? { ...p, ...newData } : p
+            );
+            return { ...prev, products: updatedProducts };
         });
     };
 
-    const previewImage = (url: string) => {
-        if (url && !url.includes('placehold.co')) {
-             setPreviewImageUrl(url);
-        }
-    };
+    const previewImage = (url: string) => setPreviewImageUrl(url);
+
+    const apiKey = appData.settings?.find((s: any) => s.SettingName === 'GOOGLE_MAPS_API_KEY')?.SettingValue || '';
 
     const renderContent = () => {
-        if (loading && !dataError) {
-            return (
-                <div className="flex flex-col items-center justify-center min-h-screen">
-                     <div className="page-card inline-flex flex-col items-center">
-                        <Spinner size="lg"/>
-                        <p className="font-semibold text-lg mt-4">កំពុងទាញយកទិន្នន័យ...</p>
-                     </div>
-                </div>
-            );
+        // Guard: If not logged in, always show login (even if URL says otherwise)
+        if (!currentUser && appState !== 'login') {
+             return <LoginPage />;
         }
-        
-        // Don't render main content if there's a critical error to prevent a broken UI
-        if (dataError && dataError.critical) return null;
 
-        switch (appState) {
-            case 'login':
-                return <LoginPage />;
-            case 'role_selection':
-                return <RoleSelectionPage onSelect={(role) => setAppState(role)} />;
-            case 'admin_dashboard':
-                return <AdminDashboard />;
-            case 'user_journey':
-                return <UserJourney onBackToRoleSelect={() => setAppState('role_selection')} />;
-            default:
-                return <LoginPage />;
+        switch(appState) {
+            case 'login': return <LoginPage />;
+            case 'role_selection': return <RoleSelectionPage onSelect={(role) => setAppState(role)} />;
+            case 'admin_dashboard': return <AdminDashboard />;
+            case 'user_journey': return <UserJourney />;
+            default: return <LoginPage />;
         }
     };
-    
+
     return (
-        <AppContext.Provider value={{ currentUser, originalAdminUser, appData, login, logout, loginAs, returnToAdmin, refreshData, updateCurrentUser, updateProductInData, geminiAi, apiKey, isChatVisible, setChatVisibility: setIsChatVisible, previewImage, setUnreadCount }}>
-            <div className="min-h-screen w-full">
-                {originalAdminUser && <ImpersonationBanner />}
-                {currentUser && <Header onBackToRoleSelect={() => setAppState('role_selection')} />}
-                <main className={`w-full transition-all duration-500 ${currentUser ? `pt-24 pb-8 px-2 sm:px-4 ${originalAdminUser ? 'mt-10' : ''}` : 'flex items-center justify-center min-h-screen p-2 sm:p-4'}`}>
-                   {renderContent()}
-                </main>
-                {currentUser && isChatVisible && (
+        <AppContext.Provider value={{
+            currentUser,
+            appData,
+            login,
+            logout,
+            refreshData,
+            originalAdminUser,
+            returnToAdmin,
+            previewImage,
+            updateCurrentUser,
+            setUnreadCount,
+            geminiAi,
+            updateProductInData,
+            apiKey,
+            setAppState,
+            setOriginalAdminUser,
+            fetchData,
+            setCurrentUser
+        }}>
+            <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
+                {currentUser && appState !== 'login' && (
                     <>
+                        <Header onBackToRoleSelect={() => setAppState('role_selection')} />
+                        {originalAdminUser && <ImpersonationBanner />}
+                        <div className={`pt-16 ${originalAdminUser ? 'mt-10' : ''}`}>
+                            {renderContent()}
+                        </div>
+                         <button 
+                            className="fixed bottom-6 right-6 p-4 bg-blue-600 text-white rounded-full shadow-lg z-40 hover:bg-blue-700"
+                            onClick={() => setIsChatOpen(true)}
+                        >
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                           {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadCount}</span>}
+                        </button>
                         <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
-                        {!isChatOpen && (
-                            <button onClick={() => { setIsChatOpen(true); setUnreadCount(0); }} className="chat-fab" aria-label="Open Chat">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                </svg>
-                                {unreadCount > 0 && (
-                                    <span className="unread-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
-                                )}
-                            </button>
-                        )}
                     </>
                 )}
-                 {dataError && (
-                    <DataErrorModal
-                        error={dataError}
-                        onRetry={() => fetchData(true)}
-                        onContinue={!dataError.critical ? () => setDataError(null) : undefined}
-                        onLogout={dataError.critical ? logout : undefined}
-                    />
+                {(!currentUser || appState === 'login') && <LoginPage />}
+
+                {previewImageUrl && (
+                    <Modal isOpen={true} onClose={() => setPreviewImageUrl(null)} maxWidth="max-w-4xl">
+                         <div className="flex justify-center">
+                            <img src={previewImageUrl} alt="Preview" className="max-h-[80vh] max-w-full object-contain" />
+                        </div>
+                    </Modal>
                 )}
-                 <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
             </div>
         </AppContext.Provider>
     );
-};
-
-export default App;
+}

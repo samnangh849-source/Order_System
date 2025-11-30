@@ -6,7 +6,8 @@ import BottomNavBar from '../components/admin/BottomNavBar';
 import PerformanceTrackingPage from './PerformanceTrackingPage';
 import ReportDashboard from './ReportDashboard';
 import SettingsDashboard from './SettingsDashboard';
-import OrdersDashboard from './OrdersDashboard'; // NEW IMPORT
+import OrdersDashboard from './OrdersDashboard';
+import { useUrlState } from '../hooks/useUrlState';
 
 
 type AdminView = 'dashboard' | 'performance';
@@ -14,8 +15,11 @@ type ActiveDashboard = 'admin' | 'orders' | 'reports' | 'settings';
 
 const AdminDashboard: React.FC = () => {
     const { appData } = useContext(AppContext);
-    const [activeDashboard, setActiveDashboard] = useState<ActiveDashboard>('admin');
-    const [currentAdminView, setCurrentAdminView] = useState<AdminView>('dashboard');
+    
+    // Use URL state for navigation
+    const [activeDashboard, setActiveDashboard] = useUrlState<ActiveDashboard>('tab', 'admin');
+    const [currentAdminView, setCurrentAdminView] = useUrlState<AdminView>('subview', 'dashboard');
+    
     const [initialReportType, setInitialReportType] = useState<any>('overview');
     
     const appDataLoading = !appData || Object.keys(appData).length === 0;
@@ -31,12 +35,10 @@ const AdminDashboard: React.FC = () => {
         }
     };
 
-    const handleAdminViewChange = (view: AdminView) => {
-        setCurrentAdminView(view);
-    }
+    // Removed handleAdminViewChange as it was just wrapping setCurrentAdminView
     
     const viewConfig: Record<AdminView, { label: string; icon: React.ReactElement; }> = {
-        dashboard: { label: 'ទិន្នន័យសង្ខេប', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg> },
+        dashboard: { label: 'ទិន្នន័យសង្ខេប', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg> },
         performance: { label: 'សមិទ្ធផល', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg> },
     };
     
@@ -151,6 +153,5 @@ const AdminDashboard: React.FC = () => {
             return <AdminDashboardContent />;
     }
 };
-
 
 export default AdminDashboard;
