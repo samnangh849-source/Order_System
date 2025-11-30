@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AppContext } from '../App';
 import { Product as ProductType, MasterProduct, ShippingMethod, Driver, BankAccount } from '../types';
@@ -336,7 +335,6 @@ const BarcodeScannerModal = ({
 const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, onCancel }) => {
     const { appData, currentUser, previewImage, apiKey } = useContext(AppContext);
     const [currentStep, setCurrentStep] = useState(1);
-    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     
     const initialOrderState = useMemo(() => ({
         page: '',
@@ -404,15 +402,11 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     }, [order, DRAFT_KEY]);
     // --- END DRAFT SYSTEM LOGIC ---
 
-    // --- Button Handlers ---
-    const handleCancelClick = () => {
-        setIsCancelModalOpen(true);
-    };
-
-    const handleConfirmCancel = () => {
-        localStorage.removeItem(DRAFT_KEY);
-        setIsCancelModalOpen(false);
-        onCancel();
+    const handleCancel = () => {
+        if (window.confirm('តើអ្នកប្រាកដទេថាចង់បោះបង់? ទិន្នន័យដែលបានបញ្ចូលនឹងត្រូវល้างចោល។\nAre you sure you want to cancel? Your current draft will be cleared.')) {
+            localStorage.removeItem(DRAFT_KEY);
+            onCancel();
+        }
     };
     
     const teamPages = useMemo(() => {
@@ -1157,63 +1151,113 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                         </div>
                                     </div>
 
-                                    {/* Row 3: Discount */}
-                                    <div className="border-t border-gray-600 pt-4 space-y-3">
-                                        <div className="flex flex-wrap gap-4 items-center">
-                                            <label className="input-label">ប្រភេទបញ្ចុះតម្លៃ:</label>
-                                            <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
-                                                {(['percent', 'amount', 'custom'] as const).map(type => (
-                                                    <label key={type} className="flex items-center cursor-pointer">
-                                                        <input type="radio" name={`discountType-${p.id}`} value={type} checked={p.discountType === type} onChange={() => handleProductUpdate(index, 'discountType', type)} className="form-radio h-4 w-4 bg-gray-700 border-gray-500 text-blue-500 focus:ring-blue-500"/>
-                                                        <span className="ml-2 text-sm">
-                                                            {type === 'percent' ? 'ជា %' : type === 'amount' ? 'ជាប្រាក់' : 'Custom'}
-                                                        </span>
-                                                    </label>
-                                                ))}
+                                    {/* Row 3: Discount & Price Adjustment */}
+                                    <div className="mt-4 pt-4 border-t border-gray-700/50">
+                                        <div className="mb-3">
+                                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">កំណត់តម្លៃ / បញ្ចុះតម្លៃ</label>
+                                            <div className="flex bg-gray-900/80 p-1 rounded-lg border border-gray-700">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleProductUpdate(index, 'discountType', 'percent')}
+                                                    className={`flex-1 flex items-center justify-center py-2 px-2 rounded-md text-sm font-medium transition-all duration-200 ${p.discountType === 'percent' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
+                                                >
+                                                    <span className="mr-1.5 text-lg leading-none">%</span> 
+                                                    ជាភាគរយ
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleProductUpdate(index, 'discountType', 'amount')}
+                                                    className={`flex-1 flex items-center justify-center py-2 px-2 rounded-md text-sm font-medium transition-all duration-200 ${p.discountType === 'amount' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
+                                                >
+                                                    <span className="mr-1.5 text-lg leading-none">$</span>
+                                                    ជាប្រាក់
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleProductUpdate(index, 'discountType', 'custom')}
+                                                    className={`flex-1 flex items-center justify-center py-2 px-2 rounded-md text-sm font-medium transition-all duration-200 ${p.discountType === 'custom' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                    កែតម្លៃ
+                                                </button>
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                            {p.discountType === 'percent' && (
-                                                <div className="relative">
-                                                    <input type="number" placeholder="Discount %" value={p.discountPercentInput} onChange={e => handleProductUpdate(index, 'discountPercentInput', e.target.value)} className="form-input"/>
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
-                                                </div>
-                                            )}
-                                            {p.discountType === 'amount' && (
-                                                <div>
-                                                    <div className="relative">
-                                                      <input type="number" placeholder="Discount Amount" value={p.discountAmountInput} onChange={e => handleProductUpdate(index, 'discountAmountInput', e.target.value)} className="form-input"/>
-                                                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                                            <div className="bg-gray-900/30 p-3 rounded-lg border border-gray-700/50">
+                                                {p.discountType === 'percent' && (
+                                                    <div>
+                                                        <label className="text-xs text-gray-400 mb-1 block">បញ្ចុះតម្លៃជា %</label>
+                                                        <div className="relative">
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="0" 
+                                                                value={p.discountPercentInput} 
+                                                                onChange={e => handleProductUpdate(index, 'discountPercentInput', e.target.value)} 
+                                                                className="form-input text-lg font-bold text-center !bg-gray-800 focus:!bg-gray-700"
+                                                            />
+                                                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">%</span>
+                                                        </div>
                                                     </div>
-                                                    {p.quantity > 1 && (
-                                                         <label className="flex items-center mt-2 text-sm">
-                                                            <input type="checkbox" checked={p.applyDiscountToTotal} onChange={e => handleProductUpdate(index, 'applyDiscountToTotal', e.target.checked)} className="h-4 w-4 rounded border-gray-500 bg-gray-700 text-blue-600 focus:ring-blue-500" />
-                                                            <span className="ml-2">បញ្ចុះតម្លៃលើតម្លៃសរុប</span>
-                                                         </label>
-                                                    )}
-                                                </div>
-                                            )}
-                                            {p.discountType === 'custom' && (
-                                                 <div className="relative">
-                                                     <input 
-                                                        type="text"
-                                                        inputMode="decimal"
-                                                        placeholder="Final Price (per item)" 
-                                                        value={p.finalPriceInput} 
-                                                        onChange={e => handleProductUpdate(index, 'finalPriceInput', e.target.value)} 
-                                                        className="form-input"
-                                                     />
-                                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                                                 </div>
-                                            )}
+                                                )}
+                                                {p.discountType === 'amount' && (
+                                                    <div>
+                                                        <label className="text-xs text-gray-400 mb-1 block">បញ្ចុះតម្លៃជាទឹកប្រាក់ ($)</label>
+                                                        <div className="relative">
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="0.00" 
+                                                                value={p.discountAmountInput} 
+                                                                onChange={e => handleProductUpdate(index, 'discountAmountInput', e.target.value)} 
+                                                                className="form-input text-lg font-bold text-center !bg-gray-800 focus:!bg-gray-700"
+                                                            />
+                                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">$</span>
+                                                        </div>
+                                                        {p.quantity > 1 && (
+                                                             <label className="flex items-center mt-3 cursor-pointer group">
+                                                                <div className="relative">
+                                                                    <input type="checkbox" checked={p.applyDiscountToTotal} onChange={e => handleProductUpdate(index, 'applyDiscountToTotal', e.target.checked)} className="sr-only" />
+                                                                    <div className={`w-10 h-5 bg-gray-700 rounded-full shadow-inner transition-colors ${p.applyDiscountToTotal ? 'bg-blue-600' : ''}`}></div>
+                                                                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${p.applyDiscountToTotal ? 'translate-x-5' : ''}`}></div>
+                                                                </div>
+                                                                <span className="ml-2 text-sm text-gray-400 group-hover:text-gray-300 transition-colors">កាត់សរុប (មិនមែនក្នុង ១ ឯកតា)</span>
+                                                             </label>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {p.discountType === 'custom' && (
+                                                     <div>
+                                                         <label className="text-xs text-gray-400 mb-1 block">តម្លៃលក់ជាក់ស្តែង (ក្នុង ១ ឯកតា)</label>
+                                                         <div className="relative">
+                                                             <input 
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                placeholder="0.00" 
+                                                                value={p.finalPriceInput} 
+                                                                onChange={e => handleProductUpdate(index, 'finalPriceInput', e.target.value)} 
+                                                                className="form-input text-lg font-bold text-center !bg-gray-800 focus:!bg-gray-700 text-green-400"
+                                                             />
+                                                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">$</span>
+                                                         </div>
+                                                     </div>
+                                                )}
                                             </div>
-                                            <div className="info-display !bg-gray-700/60">
-                                                <span className="info-label">បញ្ចុះតម្លៃសរុប</span>
-                                                <span className="info-value text-yellow-300">
-                                                    -${calculatedDiscountAmount.toFixed(2)} ({p.discountPercent.toFixed(1)}%)
-                                                </span>
+
+                                            <div className="flex flex-col justify-center h-full space-y-2">
+                                                <div className="flex justify-between items-center text-sm px-2">
+                                                    <span className="text-gray-400">តម្លៃដើមសរុប:</span>
+                                                    <span className="text-gray-300 line-through">${(p.originalPrice * p.quantity).toFixed(2)}</span>
+                                                </div>
+                                                {calculatedDiscountAmount > 0 && (
+                                                    <div className="flex justify-between items-center text-sm px-2 text-yellow-400">
+                                                        <span>បញ្ចុះតម្លៃ:</span>
+                                                        <span>-${calculatedDiscountAmount.toFixed(2)} ({p.discountPercent.toFixed(1)}%)</span>
+                                                    </div>
+                                                )}
+                                                <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-lg flex justify-between items-center">
+                                                    <span className="text-blue-200 font-medium">តម្លៃត្រូវបង់</span>
+                                                    <span className="text-2xl font-bold text-blue-400">${p.total.toFixed(2)}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1407,7 +1451,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     };
 
     return (
-        <div className="w-full max-w-4xl mx-auto md:mt-10 lg:mt-14 px-2 sm:px-0">
+        <div className="w-full max-w-4xl mx-auto">
              <SubmissionStatusModal />
             <MapModal 
                 isOpen={isMapModalOpen}
@@ -1424,26 +1468,9 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                     masterProducts={appData.products || []}
                 />
             )}
-            
-            <Modal isOpen={isCancelModalOpen} onClose={() => setIsCancelModalOpen(false)} maxWidth="max-w-sm">
-                <div className="p-6 text-center">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-900/30 mb-4 border border-red-500/30">
-                        <svg className="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-2">បញ្ជាក់ការបោះបង់</h3>
-                    <p className="text-gray-400 mb-6">តើអ្នកពិតជាចង់បោះបង់មែនទេ? ទិន្នន័យដែលបានបញ្ចូលនឹងត្រូវលុបចោល។</p>
-                    <div className="flex gap-3">
-                        <button onClick={() => setIsCancelModalOpen(false)} className="btn btn-secondary flex-1">ទេ (ត្រឡប់វិញ)</button>
-                        <button onClick={handleConfirmCancel} className="btn !bg-red-600 hover:!bg-red-700 text-white flex-1">បាទ (បោះបង់)</button>
-                    </div>
-                </div>
-            </Modal>
-
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                <h1 className="text-xl md:text-3xl font-bold text-white leading-tight">បង្កើតការកម្មង់ថ្មី (ក្រុម {team})</h1>
-                <button onClick={handleCancelClick} className="btn btn-secondary w-full sm:w-auto bg-red-900/30 text-red-300 hover:bg-red-900/50 border-red-900/50">បោះបង់</button>
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-2xl md:text-3xl font-bold text-white">បង្កើតការកម្មង់ថ្មី (ក្រុម {team})</h1>
+                <button onClick={handleCancel} className="btn btn-secondary">បោះបង់</button>
             </div>
              <style>{`
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -1458,32 +1485,41 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                 }
                 .animate-fade-in-scale { animation: fade-in-scale 0.3s forwards; }
             `}</style>
-            <div className="page-card !p-4 sm:!p-6">
-                <div className="flex justify-between items-center mb-6 relative">
-                    <div className="absolute left-0 top-1/2 w-full h-0.5 bg-gray-700 -z-10"></div>
+            <div className="page-card">
+                <div className="progress-bar">
+                    <div className="progress-line"></div>
+                    <div className="progress-line-active" style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` }}></div>
                     {STEPS.map(step => (
-                        <div key={step.number} className={`relative flex flex-col items-center z-10 bg-gray-800 px-2 transition-all duration-300 ${currentStep >= step.number ? 'text-blue-400' : 'text-gray-500'}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 mb-1 transition-all duration-300 ${currentStep >= step.number ? 'border-blue-500 bg-blue-900 text-white' : 'border-gray-600 bg-gray-800'}`}>
-                                {currentStep > step.number ? "✓" : step.number}
+                        <div key={step.number} className={`progress-step ${step.number === currentStep ? 'active' : ''} ${step.number < currentStep ? 'completed' : ''}`}>
+                            <div className="progress-step-circle">
+                                {step.number < currentStep ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                ) : (
+                                    step.number
+                                )}
                             </div>
-                            <span className="text-[10px] sm:text-xs font-medium">{step.title}</span>
+                            <div className="progress-step-label">{step.title}</div>
                         </div>
                     ))}
                 </div>
                 
-                {renderStepContent()}
-                
-                {error && <div className="mt-4 p-3 bg-red-900/20 border border-red-800 rounded text-red-300 text-center text-sm">{error}</div>}
-                
-                <div className="flex justify-between mt-8 pt-4 border-t border-gray-700">
-                    <button type="button" onClick={prevStep} className={`btn btn-secondary w-28 ${currentStep === 1 ? 'invisible' : ''}`}>ត្រឡប់</button>
-                    {currentStep < STEPS.length ? (
-                        <button type="button" onClick={nextStep} className="btn btn-primary w-28">បន្ត</button>
-                    ) : (
-                         <button type="button" onClick={submitOrder} className="btn btn-primary w-full sm:w-auto px-8" disabled={loading}>
-                            {loading ? <Spinner size="sm" /> : 'បញ្ជូន'}
-                        </button>
-                    )}
+                <div className="space-y-8 mt-8">
+                    {renderStepContent()}
+                    {error && <p className="text-red-400 mt-4 text-center bg-red-900/30 p-3 rounded-md">{error}</p>}
+                    <div className="flex justify-between pt-4 border-t border-gray-700">
+                        <button type="button" onClick={prevStep} className="btn btn-secondary" disabled={currentStep === 1 || loading}>ត្រឡប់ក្រោយ</button>
+                        {currentStep < STEPS.length ? (
+                            <button type="button" onClick={nextStep} className="btn btn-primary">
+                                {currentStep === 3 ? 'ទៅកាន់ការផ្ទៀងផ្ទាត់' : 'បន្ត'}
+                            </button>
+                        ) : (
+                             <button type="button" onClick={submitOrder} className="btn btn-primary" disabled={loading}>
+                                {loading ? <Spinner size="sm" /> : 'បញ្ជូនការកម្មង់'}
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
