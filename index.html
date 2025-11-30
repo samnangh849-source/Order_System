@@ -10,14 +10,15 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
     <script>
-      // Polyfill for process and global to prevent ReferenceErrors in browser
+      // Robust Polyfills
       window.global = window;
       window.process = window.process || {
         env: {
           NODE_ENV: 'development',
-          API_KEY: '' // This will be populated by Vite's define plugin or remain safe as empty string
+          API_KEY: '' 
         },
-        browser: true
+        browser: true,
+        version: ''
       };
     </script>
 
@@ -37,7 +38,7 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="/Order_System/assets/index-C6Pl-k6S.js"></script>
+  <script type="module" crossorigin src="/Order_System/assets/index-D4ync18B.js"></script>
   <link rel="stylesheet" crossorigin href="/Order_System/assets/index-CFaE8Pek.css">
 </head>
 <body class="bg-gray-900 text-gray-200">
