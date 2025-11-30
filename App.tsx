@@ -1,17 +1,19 @@
-
-import React, { useState, useEffect, createContext, useCallback } from 'react';
+import React, { useState, useEffect, createContext, useCallback, Suspense } from 'react';
 import { User, AppData, MasterProduct } from './types';
 import { GoogleGenAI } from "@google/genai";
-import LoginPage from './pages/LoginPage';
-import RoleSelectionPage from './pages/RoleSelectionPage';
-import AdminDashboard from './pages/AdminDashboard';
-import UserJourney from './pages/UserJourney';
-import Header from './components/common/Header';
-import ImpersonationBanner from './components/common/ImpersonationBanner';
-import Modal from './components/common/Modal';
-import ChatWidget from './components/chat/ChatWidget';
 import { WEB_APP_URL } from './constants';
 import { useUrlState } from './hooks/useUrlState';
+import Spinner from './components/common/Spinner';
+import Modal from './components/common/Modal';
+
+// Lazy load pages and complex components to prevent circular dependency issues
+const LoginPage = React.lazy(() => import('./pages/LoginPage'));
+const RoleSelectionPage = React.lazy(() => import('./pages/RoleSelectionPage'));
+const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
+const UserJourney = React.lazy(() => import('./pages/UserJourney'));
+const Header = React.lazy(() => import('./components/common/Header'));
+const ImpersonationBanner = React.lazy(() => import('./components/common/ImpersonationBanner'));
+const ChatWidget = React.lazy(() => import('./components/chat/ChatWidget'));
 
 export interface AppContextType {
     currentUser: User | null;
@@ -36,7 +38,7 @@ export interface AppContextType {
 
 export const AppContext = createContext<AppContextType>({} as AppContextType);
 
-export default function App() {
+const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [originalAdminUser, setOriginalAdminUser] = useState<User | null>(null);
     const [appData, setAppData] = useState<AppData>({} as AppData);
@@ -47,7 +49,7 @@ export default function App() {
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isChatOpen, setIsChatOpen] = useState(false);
-    const [isChatVisible, setChatVisible] = useState(true); // New state for chat visibility
+    const [isChatVisible, setChatVisible] = useState(true);
     const [geminiAi, setGeminiAi] = useState<GoogleGenAI | null>(null);
     
     useEffect(() => {
@@ -57,7 +59,7 @@ export default function App() {
                 const session = JSON.parse(sessionString);
                 if (session.user) {
                     setCurrentUser(session.user);
-                    // The appState will be determined by the URL or default logic in determineAppState
+                    // App state will be determined by URL or logic below
                 }
             } catch (e) {
                 console.error("Invalid session", e);
@@ -105,7 +107,6 @@ export default function App() {
     }, []);
 
     const determineAppState = useCallback((user: User, isImpersonating: boolean) => {
-        // If a view is already set in the URL, try to respect it
         const params = new URLSearchParams(window.location.search);
         const currentView = params.get('view');
         
@@ -195,7 +196,7 @@ export default function App() {
         });
     };
 
-    const setChatVisibility = (visible: boolean) => {
+    const setChatVisibilityState = (visible: boolean) => {
         setChatVisible(visible);
     };
 
@@ -236,29 +237,31 @@ export default function App() {
             setOriginalAdminUser,
             fetchData,
             setCurrentUser,
-            setChatVisibility
+            setChatVisibility: setChatVisibilityState
         }}>
             <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
-                {currentUser && appState !== 'login' && (
-                    <>
-                        <Header onBackToRoleSelect={() => setAppState('role_selection')} />
-                        {originalAdminUser && <ImpersonationBanner />}
-                        <div className={`pt-16 ${originalAdminUser ? 'mt-10' : ''}`}>
-                            {renderContent()}
-                        </div>
-                        {isChatVisible && (
-                             <button 
-                                className="fixed bottom-6 right-6 p-4 bg-blue-600 text-white rounded-full shadow-lg z-40 hover:bg-blue-700"
-                                onClick={() => setIsChatOpen(true)}
-                            >
-                               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-                               {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadCount}</span>}
-                            </button>
-                        )}
-                        <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
-                    </>
-                )}
-                {(!currentUser || appState === 'login') && <LoginPage />}
+                <Suspense fallback={<div className="flex h-screen items-center justify-center"><Spinner size="lg" /></div>}>
+                    {currentUser && appState !== 'login' && (
+                        <>
+                            <Header onBackToRoleSelect={() => setAppState('role_selection')} />
+                            {originalAdminUser && <ImpersonationBanner />}
+                            <div className={`pt-16 ${originalAdminUser ? 'mt-10' : ''}`}>
+                                {renderContent()}
+                            </div>
+                            {isChatVisible && (
+                                <button 
+                                    className={`fixed right-6 p-4 bg-blue-600 text-white rounded-full shadow-lg z-[60] hover:bg-blue-700 transition-all duration-300 ${appState === 'admin_dashboard' ? 'bottom-24 md:bottom-6' : 'bottom-6'}`}
+                                    onClick={() => setIsChatOpen(true)}
+                                >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                                {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">{unreadCount}</span>}
+                                </button>
+                            )}
+                            <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+                        </>
+                    )}
+                    {(!currentUser || appState === 'login') && <LoginPage />}
+                </Suspense>
 
                 {previewImageUrl && (
                     <Modal isOpen={true} onClose={() => setPreviewImageUrl(null)} maxWidth="max-w-4xl">
@@ -270,4 +273,6 @@ export default function App() {
             </div>
         </AppContext.Provider>
     );
-}
+};
+
+export default App;

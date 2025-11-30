@@ -27,8 +27,8 @@ const LoginPage: React.FC = () => {
                 return;
             }
             
-            const maxRetries = 10; // Increased from 5
-            const retryDelay = 3500; // Increased from 3000ms
+            const maxRetries = 10;
+            const retryDelay = 3500;
 
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
@@ -48,18 +48,17 @@ const LoginPage: React.FC = () => {
                     const data = await response.json();
                     if (data.status === 'success' && data.message === 'Go backend pong') {
                         setConnectionStatus({ status: 'success', message: 'ការតភ្ជាប់ជោគជ័យ' });
-                        return; // Success, exit the loop
+                        return;
                     } else {
                         setConnectionStatus({ 
                             status: 'warning', 
                             message: 'Server អាចតភ្ជាប់បាន ប៉ុន្តែការឆ្លើយតបពី ping ខុសពីការរំពឹងទុក។' 
                         });
-                        return; // Warning, but still connected, exit loop
+                        return;
                     }
                 } catch (error: any) {
                     console.error(`Connection attempt ${attempt} failed:`, error);
                     if (attempt === maxRetries) {
-                        // Last attempt failed, set final error message
                         let userMessage = 'ការតភ្ជាប់បរាជ័យ។ សូមពិនិត្យ URL, ការតភ្ជាប់ Internet, និងការកំណត់ Deployment របស់អ្នក។';
                         if (error.message && error.message.includes('404')) {
                             userMessage = 'API endpoint រកមិនឃើញ (404)។ សូមប្រាកដថាអ្នកបាន Deploy API របស់អ្នកត្រឹមត្រូវ។';
@@ -70,7 +69,6 @@ const LoginPage: React.FC = () => {
                         }
                         setConnectionStatus({ status: 'error', message: userMessage });
                     } else {
-                        // Wait before retrying
                         await new Promise(res => setTimeout(res, retryDelay));
                     }
                 }
@@ -85,9 +83,6 @@ const LoginPage: React.FC = () => {
         setLoading(true);
 
         try {
-            // WORKAROUND: Since /api/login is not implemented in the Go backend,
-            // we fetch all users and check credentials on the client-side.
-            // This is insecure and should be replaced with a proper backend login endpoint.
             const response = await fetch(`${WEB_APP_URL}/api/users`);
             if (!response.ok) {
                 throw new Error('មិនអាចទាញយកទិន្នន័យអ្នកប្រើប្រាស់បានទេ។');
@@ -102,7 +97,7 @@ const LoginPage: React.FC = () => {
             
             if (foundUser) {
                 const userToLogin = { ...foundUser };
-                delete userToLogin.Password; // Don't store password in state/localStorage
+                delete userToLogin.Password;
                 login(userToLogin);
             } else {
                 setError('ឈ្មោះគណនី ឬពាក្យសម្ងាត់មិនត្រឹមត្រូវ');
@@ -114,39 +109,63 @@ const LoginPage: React.FC = () => {
         }
     };
     
-    const ConnectionStatusIcon = () => {
-        switch (connectionStatus.status) {
-            case 'checking': return <Spinner size="sm" />;
-            case 'warning': return <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.636-1.21 2.252-1.21 2.888 0l6.294 12.022c.626 1.196-.285 2.629-1.624 2.629H3.587c-1.339 0-2.25-1.433-1.624-2.629L8.257 3.099zM10 13a1 1 0 110-2 1 1 0 010 2zm-1-4a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
-            case 'success': return <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>;
-            case 'error': return <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>;
-        }
-    };
-
     const statusClasses = {
-        checking: 'bg-yellow-900/50 text-yellow-300',
-        success: 'bg-green-900/50 text-green-300',
-        error: 'bg-red-900/50 text-red-300',
-        warning: 'bg-yellow-900/50 text-yellow-300'
+        checking: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+        success: 'bg-green-500/10 text-green-400 border-green-500/20',
+        error: 'bg-red-500/10 text-red-400 border-red-500/20',
+        warning: 'bg-orange-500/10 text-orange-400 border-orange-500/20'
     };
 
     return (
-        <div className="w-full max-w-md mx-auto login-page-container">
-            <div className="page-card text-center">
-                <div className="mb-8">
-                     <svg className="w-20 h-20 mx-auto text-blue-400" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M19 9H15V3H9V9H5L12 16L19 9ZM5 18V20H19V18H5Z"/>
-                    </svg>
-                    <h1 className="text-2xl sm:text-3xl font-bold mt-4 text-white">កម្មវិធីទម្លាក់ការកម្មង់</h1>
-                    <p className="text-gray-400 mt-2 text-sm sm:text-base">សូមបញ្ចូលគណនីដើម្បីបន្ត</p>
+        <div className="min-h-screen flex items-center justify-center p-4 login-page-container bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+            <div className="w-full max-w-md bg-gray-800/60 backdrop-blur-xl border border-gray-700/50 rounded-2xl shadow-2xl p-8 transform transition-all hover:border-gray-600/50 animate-fade-in">
+                <div className="text-center mb-8">
+                    <div className="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner ring-1 ring-blue-500/30">
+                        <svg className="w-10 h-10 text-blue-400" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M19 9H15V3H9V9H5L12 16L19 9ZM5 18V20H19V18H5Z"/>
+                        </svg>
+                    </div>
+                    <h1 className="text-3xl font-bold text-white tracking-tight">កម្មវិធីទម្លាក់ការកម្មង់</h1>
+                    <p className="text-gray-400 mt-2 text-sm">សូមបញ្ចូលគណនីដើម្បីបន្តការងារ</p>
                 </div>
 
-                <form onSubmit={handleLogin}>
-                    <div className="space-y-6">
-                        <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ឈ្មោះគណនី" className="form-input text-center" required />
-                        <div className="relative">
-                            <input type={isPasswordVisible ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="ពាក្យសម្ងាត់" className="form-input text-center pr-10" required />
-                            <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white">
+                <form onSubmit={handleLogin} className="space-y-5">
+                    <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider ml-1">ឈ្មោះគណនី</label>
+                        <div className="relative group">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 group-focus-within:text-blue-400 transition-colors" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <input 
+                                type="text" 
+                                value={username} 
+                                onChange={(e) => setUsername(e.target.value)} 
+                                className="form-input !pl-12 w-full bg-gray-900/50 border-gray-600 focus:border-blue-500 focus:ring-blue-500/20 transition-all rounded-lg py-3" 
+                                placeholder="បញ្ចូលឈ្មោះគណនី"
+                                required 
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider ml-1">ពាក្យសម្ងាត់</label>
+                        <div className="relative group">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 group-focus-within:text-blue-400 transition-colors" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <input 
+                                type={isPasswordVisible ? "text" : "password"} 
+                                value={password} 
+                                onChange={(e) => setPassword(e.target.value)} 
+                                className="form-input !pl-12 !pr-12 w-full bg-gray-900/50 border-gray-600 focus:border-blue-500 focus:ring-blue-500/20 transition-all rounded-lg py-3" 
+                                placeholder="បញ្ចូលពាក្យសម្ងាត់"
+                                required 
+                            />
+                            <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-white transition-colors">
                                 {isPasswordVisible ? (
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 .847 0 1.67.126 2.454.364m-3.033 2.446a3 3 0 11-4.243 4.243m4.242-4.242l4.243 4.243M3 3l18 18" /></svg>
                                 ) : (
@@ -155,19 +174,37 @@ const LoginPage: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                    <p className="text-red-400 mt-4 h-5">{error}</p>
-                    <button type="submit" className="btn btn-primary w-full mt-8" disabled={loading || !['success', 'warning'].includes(connectionStatus.status)}>
+
+                    {error && (
+                        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg flex items-center text-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            {error}
+                        </div>
+                    )}
+
+                    <button 
+                        type="submit" 
+                        className="btn btn-primary w-full py-3 text-base font-semibold shadow-lg shadow-blue-600/20 hover:shadow-blue-600/40 transition-all transform active:scale-95" 
+                        disabled={loading || !['success', 'warning'].includes(connectionStatus.status)}
+                    >
                         {loading ? (
-                            <>
+                            <div className="flex items-center justify-center">
                                 <Spinner size="sm"/>
                                 <span className="ml-2">កំពុងដំណើរការ...</span>
-                            </>
-                        ) : 'ចូលប្រើ'}
+                            </div>
+                        ) : 'ចូលប្រើប្រាស់'}
                     </button>
                 </form>
 
-                 <div className={`text-sm rounded-lg p-3 mt-8 flex items-center justify-center space-x-2 ${statusClasses[connectionStatus.status]}`}>
-                    <ConnectionStatusIcon />
+                 <div className={`mt-6 border rounded-lg p-3 flex items-start space-x-3 text-sm transition-all duration-300 ${statusClasses[connectionStatus.status]}`}>
+                    <div className="flex-shrink-0 mt-0.5">
+                        {connectionStatus.status === 'checking' && <Spinner size="sm" />}
+                        {connectionStatus.status === 'success' && <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>}
+                        {connectionStatus.status === 'error' && <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>}
+                        {connectionStatus.status === 'warning' && <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.636-1.21 2.252-1.21 2.888 0l6.294 12.022c.626 1.196-.285 2.629-1.624 2.629H3.587c-1.339 0-2.25-1.433-1.624-2.629L8.257 3.099zM10 13a1 1 0 110-2 1 1 0 010 2zm-1-4a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" /></svg>}
+                    </div>
                     <span className="font-medium">{connectionStatus.message}</span>
                 </div>
             </div>
