@@ -1145,88 +1145,120 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                         </div>
                                     </div>
                                     
-                                    {/* Row 2: Pricing */}
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        <div className="info-display">
-                                            <span className="info-label">តម្លៃដើម (ឯកតា)</span>
-                                            <span className="info-value">${p.originalPrice.toFixed(2)}</span>
-                                        </div>
-                                         <div className="info-display">
-                                            <span className="info-label">តម្លៃដើម (សរុប)</span>
-                                            <span className="info-value">${(p.originalPrice * p.quantity).toFixed(2)}</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Row 3: Discount */}
-                                    <div className="border-t border-gray-600 pt-4 space-y-3">
-                                        <div className="flex flex-wrap gap-4 items-center">
-                                            <label className="input-label">ប្រភេទបញ្ចុះតម្លៃ:</label>
-                                            <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
-                                                {(['percent', 'amount', 'custom'] as const).map(type => (
-                                                    <label key={type} className="flex items-center cursor-pointer">
-                                                        <input type="radio" name={`discountType-${p.id}`} value={type} checked={p.discountType === type} onChange={() => handleProductUpdate(index, 'discountType', type)} className="form-radio h-4 w-4 bg-gray-700 border-gray-500 text-blue-500 focus:ring-blue-500"/>
-                                                        <span className="ml-2 text-sm">
-                                                            {type === 'percent' ? 'ជា %' : type === 'amount' ? 'ជាប្រាក់' : 'Custom'}
-                                                        </span>
-                                                    </label>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                            {p.discountType === 'percent' && (
-                                                <div className="relative">
-                                                    <input type="number" placeholder="Discount %" value={p.discountPercentInput} onChange={e => handleProductUpdate(index, 'discountPercentInput', e.target.value)} className="form-input"/>
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
-                                                </div>
-                                            )}
-                                            {p.discountType === 'amount' && (
+                                    {/* Row 3: Discount & Summary Redesigned */}
+                                    <div className="mt-4 bg-gray-900/30 rounded-lg p-3 border border-gray-700/50">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-8">
+                                            {/* Left: Discount Controls */}
+                                            <div className="space-y-3">
                                                 <div>
-                                                    <div className="relative">
-                                                      <input type="number" placeholder="Discount Amount" value={p.discountAmountInput} onChange={e => handleProductUpdate(index, 'discountAmountInput', e.target.value)} className="form-input"/>
-                                                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                                    <label className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-1.5 block">
+                                                        បញ្ចុះតម្លៃ (Discount Type)
+                                                    </label>
+                                                    <div className="flex bg-gray-800 p-1 rounded-md border border-gray-700">
+                                                        {(['percent', 'amount', 'custom'] as const).map(type => (
+                                                            <button
+                                                                key={type}
+                                                                type="button"
+                                                                onClick={() => handleProductUpdate(index, 'discountType', type)}
+                                                                className={`flex-1 py-1.5 text-xs sm:text-sm font-medium rounded transition-all duration-200 ${
+                                                                    p.discountType === type 
+                                                                    ? 'bg-blue-600 text-white shadow-sm' 
+                                                                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
+                                                                }`}
+                                                            >
+                                                                {type === 'percent' ? '% ភាគរយ' : type === 'amount' ? '$ ជាប្រាក់' : 'Custom'}
+                                                            </button>
+                                                        ))}
                                                     </div>
-                                                    {p.quantity > 1 && (
-                                                         <label className="flex items-center mt-2 text-sm">
-                                                            <input type="checkbox" checked={p.applyDiscountToTotal} onChange={e => handleProductUpdate(index, 'applyDiscountToTotal', e.target.checked)} className="h-4 w-4 rounded border-gray-500 bg-gray-700 text-blue-600 focus:ring-blue-500" />
-                                                            <span className="ml-2">បញ្ចុះតម្លៃលើតម្លៃសរុប</span>
-                                                         </label>
+                                                </div>
+
+                                                <div>
+                                                    {p.discountType === 'percent' && (
+                                                        <div className="relative group">
+                                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                                <span className="text-gray-500 font-bold">%</span>
+                                                            </div>
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="0" 
+                                                                value={p.discountPercentInput} 
+                                                                onChange={e => handleProductUpdate(index, 'discountPercentInput', e.target.value)} 
+                                                                className="form-input !pl-8 text-right font-mono"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    {p.discountType === 'amount' && (
+                                                        <div className="space-y-2">
+                                                            <div className="relative group">
+                                                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                                    <span className="text-gray-500 font-bold">$</span>
+                                                                </div>
+                                                                <input 
+                                                                    type="number" 
+                                                                    placeholder="0.00" 
+                                                                    value={p.discountAmountInput} 
+                                                                    onChange={e => handleProductUpdate(index, 'discountAmountInput', e.target.value)} 
+                                                                    className="form-input !pl-8 text-right font-mono"
+                                                                />
+                                                            </div>
+                                                            {p.quantity > 1 && (
+                                                                 <label className="flex items-center text-xs text-gray-400 cursor-pointer hover:text-gray-300">
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        checked={p.applyDiscountToTotal} 
+                                                                        onChange={e => handleProductUpdate(index, 'applyDiscountToTotal', e.target.checked)} 
+                                                                        className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 mr-2" 
+                                                                    />
+                                                                    បញ្ចុះតម្លៃលើតម្លៃសរុប (Total)
+                                                                 </label>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {p.discountType === 'custom' && (
+                                                         <div className="relative group">
+                                                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                                <span className="text-gray-500 text-xs">Unit Price $</span>
+                                                            </div>
+                                                             <input 
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                placeholder="0.00" 
+                                                                value={p.finalPriceInput} 
+                                                                onChange={e => handleProductUpdate(index, 'finalPriceInput', e.target.value)} 
+                                                                className="form-input !pl-24 text-right font-mono"
+                                                             />
+                                                         </div>
                                                     )}
                                                 </div>
-                                            )}
-                                            {p.discountType === 'custom' && (
-                                                 <div className="relative">
-                                                     <input 
-                                                        type="text"
-                                                        inputMode="decimal"
-                                                        placeholder="Final Price (per item)" 
-                                                        value={p.finalPriceInput} 
-                                                        onChange={e => handleProductUpdate(index, 'finalPriceInput', e.target.value)} 
-                                                        className="form-input"
-                                                     />
-                                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                            </div>
+
+                                            {/* Right: Summary Breakdown */}
+                                            <div className="bg-gray-800/50 rounded-md p-3 flex flex-col justify-center space-y-2 text-sm">
+                                                 <div className="flex justify-between items-center text-gray-400">
+                                                    <span>តម្លៃដើម (Original):</span>
+                                                    <span>${(p.originalPrice * p.quantity).toFixed(2)}</span>
                                                  </div>
-                                            )}
+                                                 
+                                                 <div className="flex justify-between items-center text-yellow-400/90">
+                                                    <span>បញ្ចុះតម្លៃ (Discount):</span>
+                                                    <span className="font-mono">
+                                                        {calculatedDiscountAmount > 0 ? '-' : ''}${Math.abs(calculatedDiscountAmount).toFixed(2)}
+                                                        {p.discountType === 'percent' && ` (${p.discountPercent.toFixed(1)}%)`}
+                                                    </span>
+                                                 </div>
+
+                                                 <div className="border-t border-gray-600/50 my-1"></div>
+
+                                                 <div className="flex justify-between items-center">
+                                                    <span className="text-gray-300">តម្លៃលក់ (Unit):</span>
+                                                    <span className="text-white font-medium">${p.finalPrice.toFixed(2)}</span>
+                                                 </div>
+                                                 
+                                                 <div className="flex justify-between items-center mt-1 pt-1 bg-blue-900/20 rounded px-2 py-1 -mx-2">
+                                                    <span className="text-blue-400 font-bold uppercase text-xs tracking-wider">Total</span>
+                                                    <span className="text-blue-300 text-xl font-bold">${p.total.toFixed(2)}</span>
+                                                 </div>
                                             </div>
-                                            <div className="info-display !bg-gray-700/60">
-                                                <span className="info-label">បញ្ចុះតម្លៃសរុប</span>
-                                                <span className="info-value text-yellow-300">
-                                                    -${calculatedDiscountAmount.toFixed(2)} ({p.discountPercent.toFixed(1)}%)
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* Row 4: Summary */}
-                                    <div className="flex justify-between items-center bg-gray-900/50 p-3 rounded-lg mt-2">
-                                        <div className="text-sm">
-                                            <span className="text-gray-400">តម្លៃចុងក្រោយ (ឯកតា): </span>
-                                            <span className="font-semibold">${p.finalPrice.toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex items-baseline justify-end gap-2">
-                                            <span className="text-gray-400 text-sm">សរុប</span>
-                                            <span className="font-bold text-xl text-blue-300">${p.total.toFixed(2)}</span>
                                         </div>
                                     </div>
                                 </div>

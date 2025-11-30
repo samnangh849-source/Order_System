@@ -1,6 +1,6 @@
 
 import React from 'react';
-import ReactDOM from 'react-dom/client';
+import * as ReactDOMClient from 'react-dom/client';
 import App from './App';
 import './index.css';
 
@@ -9,7 +9,15 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-const root = ReactDOM.createRoot(rootElement);
+// Safely resolve createRoot from either named export (standard ESM) or default export (some bundles)
+const createRoot = ReactDOMClient.createRoot || (ReactDOMClient as any).default?.createRoot;
+
+if (!createRoot) {
+    console.error("ReactDOMClient exports:", ReactDOMClient);
+    throw new Error("Failed to resolve createRoot from react-dom/client");
+}
+
+const root = createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <App />
