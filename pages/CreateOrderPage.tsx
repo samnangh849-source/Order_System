@@ -1,5 +1,3 @@
-
-
 import React, { useState, useContext, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AppContext } from '../App';
 import { Product as ProductType, MasterProduct, ShippingMethod, Driver, BankAccount } from '../types';
@@ -9,14 +7,20 @@ import Modal from '../components/common/Modal';
 import { convertGoogleDriveUrl } from '../utils/fileUtils';
 import SearchableProductDropdown from '../components/common/SearchableProductDropdown';
 
+declare global {
+    interface Window {
+        Html5Qrcode: any;
+    }
+}
+
 interface CreateOrderPageProps {
     team: string;
     onSaveSuccess: () => void;
     onCancel: () => void;
 }
 
-// Extended product state for UI logic
-interface ProductUIState extends ProductType {
+// Extended product state for UI logic. Using intersection type to ensure base properties are correctly included.
+type ProductUIState = ProductType & {
     discountType: 'percent' | 'amount' | 'custom';
     discountAmountInput: string; // Value from the amount input field, stored as string for better UX
     discountPercentInput: string; // Value from the percent input field, stored as string for better UX
@@ -399,7 +403,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     // --- END DRAFT SYSTEM LOGIC ---
 
     const handleCancel = () => {
-        if (window.confirm('តើអ្នកប្រាកដទេថាចង់បោះបង់? ទិន្នន័យដែលបានបញ្ចូលនឹងត្រូវล้างចោល។\nAre you sure you want to cancel? Your current draft will be cleared.')) {
+        if (window.confirm('តើអ្នកប្រាកដទេថាចង់បោះបង់? ទិន្នន័យដែលបានបញ្ចូលនឹងត្រូវល้างចោល។\nAre you sure you want to cancel? Your current draft will be cleared.')) {
             localStorage.removeItem(DRAFT_KEY);
             onCancel();
         }
@@ -972,14 +976,13 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
         switch (currentStep) {
             case 1:
                 return (
-                    <fieldset className="border border-gray-600 p-4 rounded-lg animate-fade-in">
+                    <fieldset className="border border-gray-600 p-4 rounded-lg animate-fade-in md:mt-10">
                         <legend className="px-2 text-lg font-semibold text-blue-300">ព័ត៌មានអតិថិជន & Page</legend>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <select name="page" value={order.page} className="form-select" onChange={handlePageChange} required>
                                 <option value="">-- ជ្រើសរើស Page* --</option>
                                 {teamPages.map((p: any) => <option key={p.PageName} value={p.PageName}>{p.PageName}</option>)}
                             </select>
-                            <div></div>
                             <input type="text" name="name" value={order.customer.name} placeholder="ឈ្មោះអតិថិជន*" className="form-input" onChange={handleCustomerChange} required />
                             <div className="relative">
                                 <input 
@@ -1018,7 +1021,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
 
                              <div className="md:col-span-2">
                                 <label htmlFor="additionalLocation" className="block text-sm font-medium text-gray-400 mb-2">
-                                    ទីតាំងលម្អិត (ផ្ទះលេខ, ផ្លូវ) ឬ Link Google Map
+                                    ទីតាំងលម្អិត (ផ្ទះលេខ, ផ្លូវ)
                                 </label>
                                 <div className="flex items-center space-x-2">
                                     <input
@@ -1026,7 +1029,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                         id="additionalLocation"
                                         name="additionalLocation"
                                         value={order.customer.additionalLocation}
-                                        placeholder="បិទភ្ជាប់ Link Map ឬបញ្ចូលទីតាំងលម្អិតនៅទីនេះ"
+                                        placeholder="បញ្ចូល លេខផ្ទះ, ផ្លូវ..."
                                         className="form-input w-full"
                                         onChange={handleCustomerChange}
                                     />
@@ -1397,7 +1400,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     };
 
     return (
-        <div className="w-full max-w-4xl mx-auto">
+        <div className="w-full max-w-4xl mx-auto md:mt-8">
              <SubmissionStatusModal />
             <MapModal 
                 isOpen={isMapModalOpen}
