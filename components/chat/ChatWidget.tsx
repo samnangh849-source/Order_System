@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useRef, useEffect, useCallback, useMemo } from 'react';
 import { AppContext } from '../../App';
 import { ChatMessage, User, BackendChatMessage } from '../../types';
@@ -7,6 +8,7 @@ import { compressImage } from '../../utils/imageCompressor';
 import { WEB_APP_URL } from '../../constants';
 import AudioPlayer from './AudioPlayer';
 import { fileToBase64, convertGoogleDriveUrl, fileToDataUrl } from '../../utils/fileUtils';
+import UserAvatar from '../common/UserAvatar';
 
 interface ChatWidgetProps {
     isOpen: boolean;
@@ -20,7 +22,6 @@ type ActiveTab = 'chat' | 'users';
 const notificationSound = new Audio('https://raw.githubusercontent.com/NateeDev/aistudio-template-order-management/main/public/assets/notification.mp3');
 
 // Memoize the AudioPlayer to prevent re-renders when parent component's state changes, but its props don't.
-// This fixes the bug where all audio messages would refresh upon sending a new message.
 const MemoizedAudioPlayer = React.memo(AudioPlayer);
 
 const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
@@ -150,11 +151,10 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     }, [isOpen, fetchHistory]);
 
     // Create a ref to hold all the functions that change on re-render but are needed by the WebSocket.
-    // This prevents connectWebSocket from changing its identity, which would trigger reconnections.
     const wsCallbacksRef = useRef({ fetchHistory, transformBackendMessage, setUnreadCount, setAndCacheMessages });
     useEffect(() => {
         wsCallbacksRef.current = { fetchHistory, transformBackendMessage, setUnreadCount, setAndCacheMessages };
-    }); // No dependency array, runs on every render to keep callbacks fresh
+    });
 
     const connectWebSocket = useCallback(() => {
         if (wsRef.current && wsRef.current.readyState < 2) { return; }
@@ -180,7 +180,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         };
         
         ws.onerror = (errorEvent) => {
-            console.error("A WebSocket error occurred. This is often followed by a 'close' event with more details. Raw event:", errorEvent);
+            console.error("A WebSocket error occurred:", errorEvent);
         };
 
         ws.onmessage = (event) => {
@@ -213,9 +213,8 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 console.error("Failed to parse WebSocket message:", error);
             }
         };
-    }, []); // This function is now stable thanks to the ref
+    }, []);
 
-    // This effect correctly handles opening/closing the widget
     useEffect(() => {
         if (isOpen) {
             connectWebSocket();
@@ -225,24 +224,21 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
             if (reconnectTimeoutRef.current) {
                 clearTimeout(reconnectTimeoutRef.current);
             }
-            setReconnectAttempts(0); // Reset attempts when widget is closed
+            setReconnectAttempts(0);
             if (wsRef.current) {
-                wsRef.current.onclose = null; // Prevent reconnect on manual close
+                wsRef.current.onclose = null;
                 wsRef.current.close(1000, "Widget closing");
                 wsRef.current = null;
             }
         };
     }, [isOpen, connectWebSocket]);
 
-    // This effect handles the infinite reconnection logic
     useEffect(() => {
         if (reconnectAttempts === 0) {
             return;
         }
         
-        // Exponential backoff with a cap at 30 seconds
         const delay = Math.min(30000, Math.pow(2, reconnectAttempts) * 1000) + Math.random() * 1000;
-        console.log(`WebSocket connection lost. Reconnecting in ${Math.round(delay / 1000)}s... (Attempt ${reconnectAttempts})`);
         
         reconnectTimeoutRef.current = setTimeout(() => {
             connectWebSocket();
@@ -292,51 +288,12 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
             });
 
             if (!response.ok) {
-                 const result = await response.json().catch(() => null);
-                 let serverMessage;
-                // Safely extract server message
-                if (result) {
-                    if (typeof result.message === 'string' && result.message) {
-                        serverMessage = result.message;
-                    } else if (typeof result.error === 'string' && result.error) {
-                        serverMessage = result.error;
-                    } else if (typeof result === 'string') {
-                        serverMessage = result;
-                    } else {
-                        try {
-                            serverMessage = JSON.stringify(result);
-                        } catch {
-                            serverMessage = "Could not parse server error response.";
-                        }
-                    }
-                } else {
-                     serverMessage = `Server responded with status ${response.status}.`;
-                }
-                
-                let userFriendlyMessage = "ការផ្ញើសារបានបរាជ័យ។"; // "Message sending failed."
-                if (serverMessage.includes('Upload Folder ID is not configured')) {
-                    userFriendlyMessage = 'ការផ្ញើសារបានបរាជ័យ។ ការកំណត់រចនាសម្ព័ន្ធការ Upload ឯកសារលើ Server មិនត្រឹមត្រូវទេ។';
-                } else {
-                    userFriendlyMessage += ` Server បានឆ្លើយតបថា: ${serverMessage}`;
-                }
-                throw new Error(userFriendlyMessage);
+                 throw new Error(`Server responded with status ${response.status}.`);
             }
 
         } catch(error) {
             console.error("Error sending message:", error);
-            
-            let alertMessage = "An unknown error occurred while sending the message.";
-            if (error instanceof Error) {
-                if (error.message.toLowerCase().includes('failed to fetch')) {
-                    alertMessage = "Message failed to send. This may be due to a network connection issue or the server being temporarily unavailable. Please check your connection and try again.";
-                } else {
-                    alertMessage = error.message;
-                }
-            } else if (typeof error === 'string') {
-                 alertMessage = error;
-            }
-            
-            alert(String(alertMessage));
+            alert("Message failed to send. Please check your connection.");
             
             if (type === 'text') {
                 setNewMessage(originalMessage);
@@ -356,15 +313,12 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     timestamp: messageId,
-                    fileID: messageToDelete.fileID // Pass the fileID if it exists
+                    fileID: messageToDelete.fileID
                 })
             });
             if (!response.ok) {
-                const errData = await response.json().catch(() => ({ message: 'Server responded with an error.' }));
-                throw new Error(errData.message || 'Failed to delete the message.');
+                throw new Error('Failed to delete the message.');
             }
-            // Let the websocket handle the removal from state for all clients.
-
         } catch (error) {
             console.error("Error deleting message:", error);
             alert(`Could not delete message: ${(error as Error).message}`);
@@ -431,7 +385,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 user.UserName !== currentUser?.UserName
             );
             setMentionSuggestions(filteredUsers.slice(0, 5));
-            setMentionSelectionIndex(0); // Reset selection when suggestions change
+            setMentionSelectionIndex(0);
         } else {
             setMentionSuggestions([]);
         }
@@ -489,12 +443,12 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                 messages.map(msg => (
                     <div key={msg.id} className={`message-container ${msg.user === currentUser?.UserName ? 'current-user' : ''}`}>
                          <div className={`message-bubble ${msg.user === currentUser?.UserName ? 'current-user' : ''}`}>
-                             <img 
-                                src={msg.avatar} 
-                                alt={msg.fullName} 
-                                className="avatar cursor-pointer hover:opacity-80 transition-opacity" 
+                             <UserAvatar 
+                                avatarUrl={msg.avatar}
+                                name={msg.fullName}
+                                size="sm"
                                 onClick={() => previewImage(msg.avatar)}
-                              />
+                             />
                              <div className="flex flex-col">
                                 <div className="message-content">
                                     {msg.user !== currentUser?.UserName && <p className="font-bold text-xs text-blue-300 mb-1">{msg.fullName}</p>}
@@ -530,10 +484,10 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         <div className="user-list">
             {(appData.users || []).map((user: User) => (
                 <div key={user.UserName} className="user-list-item">
-                    <img 
-                        src={convertGoogleDriveUrl(user.ProfilePictureURL, 'image')} 
-                        alt={user.FullName} 
-                        className="cursor-pointer hover:opacity-80 transition-opacity"
+                    <UserAvatar 
+                        avatarUrl={user.ProfilePictureURL}
+                        name={user.FullName}
+                        size="md"
                         onClick={() => previewImage(convertGoogleDriveUrl(user.ProfilePictureURL, 'image'))}
                     />
                     <div className="user-info">
@@ -585,7 +539,12 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
                                     onClick={() => handleMentionSelect(user.UserName)} 
                                     className={`mention-item ${index === mentionSelectionIndex ? 'selected' : ''}`}
                                 >
-                                    <img src={convertGoogleDriveUrl(user.ProfilePictureURL, 'image')} alt={user.FullName} />
+                                    <UserAvatar 
+                                        avatarUrl={user.ProfilePictureURL}
+                                        name={user.FullName}
+                                        size="sm"
+                                        className="mr-2"
+                                    />
                                     <span className="fullname">{user.FullName}</span>
                                     <span className="username">@{user.UserName}</span>
                                 </div>

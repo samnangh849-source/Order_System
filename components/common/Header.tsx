@@ -3,6 +3,7 @@ import React, { useState, useContext, useRef, useEffect } from 'react';
 import { AppContext } from '../../App';
 import EditProfileModal from './EditProfileModal';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
+import UserAvatar from './UserAvatar';
 
 interface HeaderProps {
     onBackToRoleSelect: () => void;
@@ -28,14 +29,6 @@ const Header: React.FC<HeaderProps> = ({ onBackToRoleSelect }) => {
 
     if (!currentUser) return null;
 
-    const getInitials = (name: string): string => {
-        if (!name || typeof name !== 'string') return 'N/A';
-        const names = name.trim().split(' ').filter(Boolean);
-        if (names.length === 0) return 'N/A';
-        if (names.length === 1) return names[0].charAt(0).toUpperCase();
-        return `${names[0].charAt(0)}${names[names.length - 1].charAt(0)}`.toUpperCase();
-    };
-
     return (
         <>
             <header className="fixed top-0 left-0 right-0 bg-gray-900/70 backdrop-blur-sm border-b border-gray-700 z-40 p-2 sm:p-3 shadow-lg"
@@ -47,21 +40,14 @@ const Header: React.FC<HeaderProps> = ({ onBackToRoleSelect }) => {
                             <p className="font-semibold text-white text-sm sm:text-base truncate">{currentUser.FullName}</p>
                             <p className="text-xs text-blue-300">{currentUser.IsSystemAdmin ? 'System Admin' : currentUser.Role}</p>
                         </div>
-                        {currentUser.ProfilePictureURL ? (
-                            <img 
-                                src={convertGoogleDriveUrl(currentUser.ProfilePictureURL)} 
-                                alt="Avatar" 
-                                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-blue-500 cursor-pointer hover:opacity-80 transition-opacity"
-                                onClick={() => previewImage(convertGoogleDriveUrl(currentUser.ProfilePictureURL) || '')}
-                            />
-                        ) : (
-                             <div 
-                                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-blue-500 bg-gray-700 flex items-center justify-center cursor-pointer select-none"
-                                title={currentUser.FullName}
-                            >
-                                <span className="text-base sm:text-lg font-bold text-gray-300">{getInitials(currentUser.FullName)}</span>
-                            </div>
-                        )}
+                        
+                        <UserAvatar 
+                            avatarUrl={currentUser.ProfilePictureURL}
+                            name={currentUser.FullName}
+                            className="w-10 h-10 sm:w-12 sm:h-12 border-2 border-blue-500"
+                            onClick={() => previewImage(convertGoogleDriveUrl(currentUser.ProfilePictureURL) || '')}
+                        />
+
                         <div className="relative" ref={dropdownRef}>
                             <button onClick={() => setDropdownOpen(!dropdownOpen)} className="p-2 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white">
                                 <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
