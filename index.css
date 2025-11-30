@@ -4,12 +4,6 @@ body {
     font-family: 'Kantumruy Pro', sans-serif;
     background-color: #111827;
 }
-
-/* Force Tailwind font-sans to use Kantumruy Pro */
-.font-sans {
-    font-family: 'Kantumruy Pro', sans-serif !important;
-}
-
 .flare-light {
     position: fixed;
     top: 0;

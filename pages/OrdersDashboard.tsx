@@ -8,6 +8,7 @@ import OrdersList from '../components/orders/OrdersList';
 import { WEB_APP_URL } from '../constants';
 import Modal from '../components/common/Modal';
 import SearchableProductDropdown from '../components/common/SearchableProductDropdown';
+import { useUrlState } from '../hooks/useUrlState';
 
 interface OrdersDashboardProps {
     onBack: () => void;
@@ -51,13 +52,16 @@ const FilterPanel = ({ isOpen, onClose, children }: { isOpen: boolean, onClose: 
 
 const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
     const { appData, refreshData } = useContext(AppContext);
-    const [editingOrder, setEditingOrder] = useState<ParsedOrder | null>(null);
+    
+    // Use URL state for editing ID to support back button
+    const [editingOrderId, setEditingOrderId] = useUrlState<string>('editOrder', '');
+    
     const [allOrders, setAllOrders] = useState<ParsedOrder[]>([]);
     const [ordersLoading, setOrdersLoading] = useState(true);
     const [ordersError, setOrdersError] = useState('');
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
     const [dateRangeDisplay, setDateRangeDisplay] = useState('');
-    const [searchQuery, setSearchQuery] = useState(''); // NEW: Search query state
+    const [searchQuery, setSearchQuery] = useState(''); 
 
     const [filters, setFilters] = useState({
         datePreset: 'this_month' as DateRangePreset,
@@ -72,6 +76,11 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         bank: '',
         monthForWeeks: new Date().toISOString().slice(0, 7), // YYYY-MM
     });
+
+    const editingOrder = useMemo(() => {
+        if (!editingOrderId) return null;
+        return allOrders.find(o => o['Order ID'] === editingOrderId) || null;
+    }, [editingOrderId, allOrders]);
 
     const fetchAllOrders = async () => {
         setOrdersLoading(true);
@@ -223,7 +232,6 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
             return true;
         });
         
-        // NEW: Apply search query filter
         if (searchQuery.trim()) {
             const lowercasedQuery = searchQuery.toLowerCase().trim();
             ordersToFilter = ordersToFilter.filter(order => {
@@ -246,13 +254,13 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
     }, [allOrders, filters, searchQuery]);
 
     const handleSaveSuccess = () => {
-        setEditingOrder(null);
+        setEditingOrderId('');
         fetchAllOrders();
         refreshData();
     };
     
     const handleEditOrder = (order: ParsedOrder) => {
-        setEditingOrder(order);
+        setEditingOrderId(order['Order ID']);
     };
 
     const FiltersComponent = () => (
@@ -353,7 +361,7 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         }
         
         if (editingOrder) {
-            return <EditOrderPage order={editingOrder} onSaveSuccess={handleSaveSuccess} onCancel={() => setEditingOrder(null)} />;
+            return <EditOrderPage order={editingOrder} onSaveSuccess={handleSaveSuccess} onCancel={() => setEditingOrderId('')} />;
         }
 
         return <OrdersList orders={filteredOrders} onEdit={handleEditOrder} showActions={true} />;
