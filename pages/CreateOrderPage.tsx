@@ -336,6 +336,7 @@ const BarcodeScannerModal = ({
 const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, onCancel }) => {
     const { appData, currentUser, previewImage, apiKey } = useContext(AppContext);
     const [currentStep, setCurrentStep] = useState(1);
+    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     
     const initialOrderState = useMemo(() => ({
         page: '',
@@ -365,7 +366,6 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
     const [mapSearchUrl, setMapSearchUrl] = useState('');
     const [scanMode, setScanMode] = useState<'single' | 'increment'>('increment');
-    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     
     // --- START DRAFT SYSTEM LOGIC ---
     const DRAFT_KEY = useMemo(() => `createOrderDraft_${currentUser?.UserName}_${team}`, [currentUser, team]);
@@ -404,6 +404,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
     }, [order, DRAFT_KEY]);
     // --- END DRAFT SYSTEM LOGIC ---
 
+    // --- Button Handlers ---
     const handleCancelClick = () => {
         setIsCancelModalOpen(true);
     };
@@ -1054,7 +1055,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
 
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-400 mb-2">ថ្លៃសេវាដឹកជញ្ជូន</label>
-                                <div className="flex flex-row items-center gap-2">
+                                <div className="flex items-center space-x-2">
                                     <button
                                         type="button"
                                         onClick={() => handleShippingOptionChange('charge')}
@@ -1231,9 +1232,9 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                 </div>
                                )})}
                         </div>
-                        <div className="flex flex-col sm:flex-row items-center gap-4 mt-6">
-                            <button type="button" onClick={addProduct} className="btn btn-secondary w-full sm:w-auto justify-center">បន្ថែមផលិតផល</button>
-                            <button type="button" onClick={() => setIsScannerVisible(true)} className="btn btn-secondary w-full sm:w-auto justify-center flex items-center" disabled={isScannerVisible}>
+                        <div className="flex items-center space-x-4 mt-6">
+                            <button type="button" onClick={addProduct} className="btn btn-secondary">បន្ថែមផលិតផល</button>
+                            <button type="button" onClick={() => setIsScannerVisible(true)} className="btn btn-secondary flex items-center" disabled={isScannerVisible}>
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M3 7V5a2 2 0 0 1 2-2h2" />
                                     <path d="M17 3h2a2 2 0 0 1 2 2v2" />
@@ -1425,30 +1426,24 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
             )}
             
             <Modal isOpen={isCancelModalOpen} onClose={() => setIsCancelModalOpen(false)} maxWidth="max-w-sm">
-                <div className="p-4 text-center">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-900/50 mb-4">
-                        <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="p-6 text-center">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-900/30 mb-4 border border-red-500/30">
+                        <svg className="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                     </div>
-                    <h3 className="text-lg font-bold text-white mb-2">បញ្ជាក់ការបោះបង់</h3>
-                    <p className="text-gray-300 mb-6 text-sm">
-                        តើអ្នកប្រាកដទេថាចង់បោះបង់? ទិន្នន័យដែលបានបញ្ចូលនឹងត្រូវលុបចោល។
-                    </p>
-                    <div className="flex justify-center space-x-3">
-                        <button onClick={() => setIsCancelModalOpen(false)} className="btn btn-secondary flex-1">
-                            ទេ (រក្សាទុក)
-                        </button>
-                        <button onClick={handleConfirmCancel} className="btn !bg-red-600 hover:!bg-red-700 text-white flex-1">
-                            បាទ/ចាស (បោះបង់)
-                        </button>
+                    <h3 className="text-xl font-bold text-white mb-2">បញ្ជាក់ការបោះបង់</h3>
+                    <p className="text-gray-400 mb-6">តើអ្នកពិតជាចង់បោះបង់មែនទេ? ទិន្នន័យដែលបានបញ្ចូលនឹងត្រូវលុបចោល។</p>
+                    <div className="flex gap-3">
+                        <button onClick={() => setIsCancelModalOpen(false)} className="btn btn-secondary flex-1">ទេ (ត្រឡប់វិញ)</button>
+                        <button onClick={handleConfirmCancel} className="btn !bg-red-600 hover:!bg-red-700 text-white flex-1">បាទ (បោះបង់)</button>
                     </div>
                 </div>
             </Modal>
 
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <h1 className="text-xl md:text-3xl font-bold text-white leading-tight">បង្កើតការកម្មង់ថ្មី (ក្រុម {team})</h1>
-                <button onClick={handleCancelClick} className="btn btn-secondary w-full sm:w-auto">បោះបង់</button>
+                <button onClick={handleCancelClick} className="btn btn-secondary w-full sm:w-auto bg-red-900/30 text-red-300 hover:bg-red-900/50 border-red-900/50">បោះបង់</button>
             </div>
              <style>{`
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -1463,41 +1458,32 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                 }
                 .animate-fade-in-scale { animation: fade-in-scale 0.3s forwards; }
             `}</style>
-            <div className="page-card">
-                <div className="progress-bar">
-                    <div className="progress-line"></div>
-                    <div className="progress-line-active" style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` }}></div>
+            <div className="page-card !p-4 sm:!p-6">
+                <div className="flex justify-between items-center mb-6 relative">
+                    <div className="absolute left-0 top-1/2 w-full h-0.5 bg-gray-700 -z-10"></div>
                     {STEPS.map(step => (
-                        <div key={step.number} className={`progress-step ${step.number === currentStep ? 'active' : ''} ${step.number < currentStep ? 'completed' : ''}`}>
-                            <div className="progress-step-circle">
-                                {step.number < currentStep ? (
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                    </svg>
-                                ) : (
-                                    step.number
-                                )}
+                        <div key={step.number} className={`relative flex flex-col items-center z-10 bg-gray-800 px-2 transition-all duration-300 ${currentStep >= step.number ? 'text-blue-400' : 'text-gray-500'}`}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 mb-1 transition-all duration-300 ${currentStep >= step.number ? 'border-blue-500 bg-blue-900 text-white' : 'border-gray-600 bg-gray-800'}`}>
+                                {currentStep > step.number ? "✓" : step.number}
                             </div>
-                            <div className="progress-step-label">{step.title}</div>
+                            <span className="text-[10px] sm:text-xs font-medium">{step.title}</span>
                         </div>
                     ))}
                 </div>
                 
-                <div className="space-y-8 mt-8">
-                    {renderStepContent()}
-                    {error && <p className="text-red-400 mt-4 text-center bg-red-900/30 p-3 rounded-md">{error}</p>}
-                    <div className="flex justify-between pt-4 border-t border-gray-700 gap-4">
-                        <button type="button" onClick={prevStep} className="btn btn-secondary w-full sm:w-auto" disabled={currentStep === 1 || loading}>ត្រឡប់ក្រោយ</button>
-                        {currentStep < STEPS.length ? (
-                            <button type="button" onClick={nextStep} className="btn btn-primary w-full sm:w-auto">
-                                {currentStep === 3 ? 'ទៅកាន់ការផ្ទៀងផ្ទាត់' : 'បន្ត'}
-                            </button>
-                        ) : (
-                             <button type="button" onClick={submitOrder} className="btn btn-primary w-full sm:w-auto" disabled={loading}>
-                                {loading ? <Spinner size="sm" /> : 'បញ្ជូនការកម្មង់'}
-                            </button>
-                        )}
-                    </div>
+                {renderStepContent()}
+                
+                {error && <div className="mt-4 p-3 bg-red-900/20 border border-red-800 rounded text-red-300 text-center text-sm">{error}</div>}
+                
+                <div className="flex justify-between mt-8 pt-4 border-t border-gray-700">
+                    <button type="button" onClick={prevStep} className={`btn btn-secondary w-28 ${currentStep === 1 ? 'invisible' : ''}`}>ត្រឡប់</button>
+                    {currentStep < STEPS.length ? (
+                        <button type="button" onClick={nextStep} className="btn btn-primary w-28">បន្ត</button>
+                    ) : (
+                         <button type="button" onClick={submitOrder} className="btn btn-primary w-full sm:w-auto px-8" disabled={loading}>
+                            {loading ? <Spinner size="sm" /> : 'បញ្ជូន'}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
