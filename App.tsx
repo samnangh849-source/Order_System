@@ -5,6 +5,7 @@ import { WEB_APP_URL } from './constants';
 import { useUrlState } from './hooks/useUrlState';
 import Spinner from './components/common/Spinner';
 import Modal from './components/common/Modal';
+import DataErrorModal from './components/common/DataErrorModal';
 
 // Lazy load pages and complex components to prevent circular dependency issues
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
@@ -38,10 +39,25 @@ export interface AppContextType {
 
 export const AppContext = createContext<AppContextType>({} as AppContextType);
 
+// Default empty state to prevent undefined errors
+const initialAppData: AppData = {
+    users: [],
+    products: [],
+    pages: [],
+    locations: [],
+    shippingMethods: [],
+    drivers: [],
+    bankAccounts: [],
+    phoneCarriers: [],
+    colors: [],
+    settings: [],
+    targets: []
+};
+
 const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [originalAdminUser, setOriginalAdminUser] = useState<User | null>(null);
-    const [appData, setAppData] = useState<AppData>({} as AppData);
+    const [appData, setAppData] = useState<AppData>(initialAppData);
     
     // Use URL state for the main view to support back/forward buttons
     const [appState, setAppState] = useUrlState<'login' | 'role_selection' | 'admin_dashboard' | 'user_journey'>('view', 'login');
@@ -51,7 +67,28 @@ const App: React.FC = () => {
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [isChatVisible, setChatVisible] = useState(true);
     const [geminiAi, setGeminiAi] = useState<GoogleGenAI | null>(null);
+    const [dataError, setDataError] = useState<{ message: string; title: string; critical: boolean } | null>(null);
     
+    useEffect(() => {
+        const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+            console.error("Unhandled promise rejection:", event.reason);
+            // Prevent the default console error from showing up if we want to suppress it,
+            // but usually we want to log it. We don't want to crash the app though.
+        };
+        window.addEventListener('unhandledrejection', handleUnhandledRejection);
+        return () => window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    }, []);
+
+    // Initialize Gemini AI using environment variable
+    useEffect(() => {
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            setGeminiAi(ai);
+        } catch (e) {
+            console.error("Failed to initialize Gemini AI", e);
+        }
+    }, []);
+
     useEffect(() => {
         const sessionString = localStorage.getItem('orderAppSession');
         if (sessionString) {
@@ -68,6 +105,32 @@ const App: React.FC = () => {
         }
     }, []);
 
+    const normalizeData = (data: any): AppData => {
+        // CRITICAL FIX: Ensure we return an object with initialized arrays
+        if (!data || typeof data !== 'object') return initialAppData;
+        
+        const normalized: any = {};
+        Object.keys(data).forEach(key => {
+            // Convert TitleCase keys (often from Go backend) to camelCase
+            const camelKey = key.charAt(0).toLowerCase() + key.slice(1);
+            normalized[camelKey] = data[key];
+        });
+
+        // Ensure critical arrays are initialized even if missing from API
+        // AND strictly filter out null/undefined items from within the arrays
+        const arrayKeys = ['users', 'products', 'pages', 'locations', 'shippingMethods', 'drivers', 'bankAccounts', 'phoneCarriers', 'colors', 'settings', 'targets'];
+        arrayKeys.forEach(key => {
+            if (!normalized[key] || !Array.isArray(normalized[key])) {
+                normalized[key] = [];
+            } else {
+                // Filter out any null or non-object items that might crash components
+                normalized[key] = normalized[key].filter((item: any) => item !== null && typeof item === 'object');
+            }
+        });
+
+        return normalized as AppData;
+    };
+
     const fetchData = useCallback(async (force = false) => {
         const cacheKey = 'appDataCache';
         const cached = localStorage.getItem(cacheKey);
@@ -76,33 +139,48 @@ const App: React.FC = () => {
                 const { data, timestamp } = JSON.parse(cached);
                 if (Date.now() - timestamp < 5 * 60 * 1000) { 
                     setAppData(data);
-                    const apiKeySetting = data.settings?.find((s: any) => s.SettingName === 'GEMINI_API_KEY');
-                    if (apiKeySetting?.SettingValue) {
-                         const ai = new GoogleGenAI({ apiKey: apiKeySetting.SettingValue });
-                         setGeminiAi(ai);
-                    }
                     return;
                 }
             } catch (e) {}
         }
 
         try {
-            const response = await fetch(`${WEB_APP_URL}/api/static-data`);
-            if (response.ok) {
-                const result = await response.json();
-                if (result.status === 'success') {
-                    setAppData(result.data);
-                    localStorage.setItem(cacheKey, JSON.stringify({ data: result.data, timestamp: Date.now() }));
+            // Fetch static data AND users in parallel to ensure we have user info for order enrichment
+            const [staticResponse, usersResponse] = await Promise.all([
+                fetch(`${WEB_APP_URL}/api/static-data`),
+                fetch(`${WEB_APP_URL}/api/users`)
+            ]);
+
+            if (staticResponse.ok && usersResponse.ok) {
+                const staticResult = await staticResponse.json();
+                const usersResult = await usersResponse.json();
+
+                if (staticResult.status === 'success' && usersResult.status === 'success') {
+                    // Normalize the data before setting state
+                    const normalizedData = normalizeData(staticResult.data);
                     
-                    const apiKeySetting = result.data.settings?.find((s: any) => s.SettingName === 'GEMINI_API_KEY');
-                    if (apiKeySetting?.SettingValue) {
-                        const ai = new GoogleGenAI({ apiKey: apiKeySetting.SettingValue });
-                        setGeminiAi(ai);
-                    }
+                    // Manually merge users since they come from a separate endpoint
+                    normalizedData.users = usersResult.data || [];
+                    
+                    setAppData(normalizedData);
+                    localStorage.setItem(cacheKey, JSON.stringify({ data: normalizedData, timestamp: Date.now() }));
+                    setDataError(null); // Clear error on success
+                } else {
+                    throw new Error(staticResult.message || usersResult.message || "Unknown error from server");
                 }
+            } else {
+                throw new Error(`HTTP Error: Static ${staticResponse.status} / Users ${usersResponse.status}`);
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Failed to fetch data", e);
+            // Only show blocking error if we have no cached data to show
+            if (!localStorage.getItem(cacheKey)) {
+                setDataError({
+                    title: "ការតភ្ជាប់មានបញ្ហា (Connection Error)",
+                    message: `មិនអាចទាញយកទិន្នន័យពី Server បានទេ។ សូមពិនិត្យមើលការតភ្ជាប់ Internet របស់អ្នក។\n\n(Error: ${e.message})`,
+                    critical: true
+                });
+            }
         }
     }, []);
 
@@ -269,6 +347,14 @@ const App: React.FC = () => {
                             <img src={previewImageUrl} alt="Preview" className="max-h-[80vh] max-w-full object-contain" />
                         </div>
                     </Modal>
+                )}
+
+                {dataError && (
+                    <DataErrorModal 
+                        error={dataError} 
+                        onRetry={() => { setDataError(null); fetchData(true); }} 
+                        onLogout={logout} 
+                    />
                 )}
             </div>
         </AppContext.Provider>

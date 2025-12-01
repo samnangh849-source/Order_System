@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect, useMemo } from 'react';
 import { AppContext } from '../App';
 import Spinner from '../components/common/Spinner';
-import { FullOrder, ParsedOrder, MasterProduct, ShippingMethod, Driver, BankAccount } from '../types';
+import { FullOrder, ParsedOrder, MasterProduct, ShippingMethod, Driver, BankAccount, User } from '../types';
 import EditOrderPage from './EditOrderPage';
 import OrdersList from '../components/orders/OrdersList';
 import { WEB_APP_URL } from '../constants';
@@ -76,10 +76,38 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         monthForWeeks: new Date().toISOString().slice(0, 7), // YYYY-MM
     });
 
+    // 1. Enrich Orders: Infer Team from User if missing (Frontend Fix)
+    const enrichedOrders = useMemo(() => {
+        if (!allOrders) return [];
+        return allOrders.map(order => {
+            // SAFEGUARD: Cast to string to prevent crashes if value is a number
+            let derivedTeam = String(order.Team || '').trim();
+            const orderUser = String(order.User || '').trim();
+            
+            // If team is empty but User exists, try to find the user's team from appData
+            if (!derivedTeam && orderUser && appData.users) {
+                const foundUser = appData.users.find((u: User) => 
+                    u && u.UserName && 
+                    String(u.UserName).toLowerCase().trim() === orderUser.toLowerCase()
+                );
+                
+                if (foundUser && foundUser.Team) {
+                    const teams = String(foundUser.Team).split(',').map(t => t.trim()).filter(Boolean);
+                    if (teams.length > 0) {
+                        derivedTeam = teams[0];
+                    }
+                }
+            }
+            
+            return { ...order, Team: derivedTeam };
+        });
+    }, [allOrders, appData.users]);
+
     const editingOrder = useMemo(() => {
         if (!editingOrderId) return null;
-        return allOrders.find(o => o['Order ID'] === editingOrderId) || null;
-    }, [editingOrderId, allOrders]);
+        // SAFEGUARD: Cast both to string to ensure matching works even if one is number
+        return enrichedOrders.find(o => String(o['Order ID']) === String(editingOrderId)) || null;
+    }, [editingOrderId, enrichedOrders]);
 
     const fetchAllOrders = async () => {
         setOrdersLoading(true);
@@ -102,21 +130,24 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
                 throw new Error(result.message || 'Error in API response for orders.');
             }
             
-            // SAFEGUARD: Ensure data is an array
-            const rawOrders: FullOrder[] = Array.isArray(result.data) ? result.data : [];
+            const rawOrders: FullOrder[] = Array.isArray(result.data) 
+                ? result.data.filter((o: any) => o !== null && typeof o === 'object') 
+                : [];
             
             const parsed = rawOrders.map(o => {
                 let products = [];
                 try {
                     if (o['Products (JSON)'] && typeof o['Products (JSON)'] === 'string') {
-                        products = JSON.parse(o['Products (JSON)']);
+                        const parsedProducts = JSON.parse(o['Products (JSON)']);
+                        // SAFEGUARD: Ensure result is an array
+                        products = Array.isArray(parsedProducts) ? parsedProducts : [];
                     }
                 } catch(e) { 
                     console.error("Failed to parse products JSON for order:", o['Order ID'], o['Products (JSON)']);
+                    products = [];
                 }
                 return { ...o, Products: products };
             });
-            // SAFEGUARD: Check timestamps
             parsed.sort((a, b) => {
                 const timeA = a.Timestamp ? new Date(a.Timestamp).getTime() : 0;
                 const timeB = b.Timestamp ? new Date(b.Timestamp).getTime() : 0;
@@ -127,10 +158,7 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
             let friendlyErrorMessage = `មិនអាចទាញយកប្រតិបត្តិការណ៍បានទេ: ${err.message}`;
             if (err.message && err.message.includes('cannot unmarshal number into Go struct field')) {
                 friendlyErrorMessage = `មានបញ្ហាទិន្នន័យនៅក្នុង Google Sheet!\n\n` +
-                    `Server បានបរាជ័យក្នុងការអានទិន្នន័យ ព្រោះជួរឈរមួយចំនួនដូចជា "Customer Name" ឬ "Note" មានផ្ទុកទិន្នន័យជាលេខ ជំនួសឱ្យអក្សរ។\n\n` +
-                    `➡️ សូមចូលទៅកាន់សន្លឹក "AllOrders" របស់អ្នក ហើយពិនិត្យមើលជួរឈរទាំងនោះ។\n` +
-                    `➡️ សូមប្រាកដថា ទិន្នន័យទាំងអស់ក្នុងជួរឈរនេះជាអក្សរ។ (ឧទាហរណ៍៖ បើមានលេខ 123 សូមប្តូរទៅជា '123)។\n` +
-                    `➡️ ដើម្បីជៀសវាងបញ្ហានេះនាពេលអនាគត សូម Format ជួរឈរទាំងមូលជា "Plain Text"។`;
+                    `Server បានបរាជ័យក្នុងការអានទិន្នន័យ។ សូមពិនិត្យមើលជួរឈរដូចជា "Customer Name" ឬ "Note" ដែលគួរតែជាអក្សរ។`;
             }
             setOrdersError(friendlyErrorMessage);
         } finally {
@@ -219,26 +247,36 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
     }, []);
 
     const filteredOrders = useMemo(() => {
-        let ordersToFilter = allOrders.filter(order => {
+        let ordersToFilter = enrichedOrders.filter(order => {
             if (filters.datePreset !== 'all') {
                 const startDate = filters.startDate ? new Date(`${filters.startDate}T00:00:00`) : null;
                 const endDate = filters.endDate ? new Date(`${filters.endDate}T23:59:59`) : null;
                 
-                // SAFEGUARD: Check if timestamp exists
                 if (!order.Timestamp) return false;
                 
                 const orderDate = new Date(order.Timestamp);
                 if (startDate && orderDate < startDate) return false;
                 if (endDate && orderDate > endDate) return false;
             }
-            if (filters.team && order.Team !== filters.team) return false;
-            if (filters.user && order.User !== filters.user) return false;
+            
+            // SAFEGUARD: Cast to string before matching
+            if (filters.team) {
+                const orderTeam = String(order.Team || '').toLowerCase().trim();
+                const filterTeam = String(filters.team).toLowerCase().trim();
+                if (orderTeam !== filterTeam) return false;
+            }
+            
+            if (filters.user) {
+                const orderUser = String(order.User || '').toLowerCase().trim();
+                const filterUser = String(filters.user).toLowerCase().trim();
+                if (orderUser !== filterUser) return false;
+            }
+            
             if (filters.paymentStatus && order['Payment Status'] !== filters.paymentStatus) return false;
             if (filters.shippingService && order['Internal Shipping Method'] !== filters.shippingService) return false;
             if (filters.driver && order['Internal Shipping Details'] !== filters.driver) return false;
             if (filters.bank && order['Payment Info'] !== filters.bank) return false;
-            // SAFEGUARD: Check Products array
-            if (filters.product && (!order.Products || !order.Products.some(p => p.name === filters.product))) return false;
+            if (filters.product && (!Array.isArray(order.Products) || !order.Products.some(p => p.name === filters.product))) return false;
 
             return true;
         });
@@ -246,17 +284,17 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         if (searchQuery.trim()) {
             const lowercasedQuery = searchQuery.toLowerCase().trim();
             ordersToFilter = ordersToFilter.filter(order => {
-                // SAFEGUARD: Handle undefined/null properties
                 const searchableFields = [
-                    order['Order ID'] || '',
-                    order['Customer Name'] || '',
-                    order['Customer Phone'] || '',
-                    order.User || '',
-                    order.Page || '',
+                    String(order['Order ID'] || ''),
+                    String(order['Customer Name'] || ''),
+                    String(order['Customer Phone'] || ''),
+                    String(order.User || ''),
+                    String(order.Page || ''),
                 ].join(' ').toLowerCase();
 
-                // SAFEGUARD: Handle undefined/null Products array
-                const productsString = (order.Products || []).map(p => p.name || '').join(' ').toLowerCase();
+                const productsString = Array.isArray(order.Products) 
+                    ? order.Products.map(p => String(p.name || '')).join(' ').toLowerCase() 
+                    : '';
 
                 return searchableFields.includes(lowercasedQuery) || productsString.includes(lowercasedQuery);
             });
@@ -264,7 +302,7 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         
         return ordersToFilter;
 
-    }, [allOrders, filters, searchQuery]);
+    }, [enrichedOrders, filters, searchQuery]);
 
     const handleSaveSuccess = () => {
         setEditingOrderId('');
@@ -312,7 +350,7 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
                     <label className="input-label">Team</label>
                     <select value={filters.team} onChange={e => handleFilterChange('team', e.target.value)} className="form-select">
                         <option value="">All Teams</option>
-                        {Array.from(new Set(allOrders.map(o => o.Team).filter(Boolean))).map(t => <option key={t} value={t}>{t}</option>)}
+                        {Array.from(new Set(enrichedOrders.map(o => o.Team).filter(Boolean))).map(t => <option key={String(t)} value={String(t)}>{String(t)}</option>)}
                     </select>
                 </div>
                 <div>
@@ -384,7 +422,6 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         <div className="w-full h-full min-h-[calc(100vh-6rem)] max-w-7xl mx-auto p-2 sm:p-4 lg:p-6 animate-fade-in">
              <style>{`.animate-fade-in { animation: fadeIn 0.5s ease-in-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
              
-            {/* --- MODALS & PANELS (Responsive) --- */}
             <div className="md:hidden">
                 <FilterPanel isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)}>
                     <FiltersComponent />

@@ -1,12 +1,13 @@
 import React, { useState, useContext, useEffect, useMemo } from 'react';
 import { AppContext } from '../App';
-import { ParsedOrder, FullOrder } from '../types';
+import { ParsedOrder, FullOrder, User } from '../types';
 import { WEB_APP_URL } from '../constants';
 import Spinner from '../components/common/Spinner';
 import OrdersList from '../components/orders/OrdersList';
 import CreateOrderPage from './CreateOrderPage';
 
 const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
+    const { appData } = useContext(AppContext);
     const [orders, setOrders] = useState<ParsedOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -35,26 +36,51 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
                     throw new Error(result.message || 'Error in API response for orders.');
                 }
                 
-                // SAFEGUARD: Ensure data is an array and filter out NULL items specifically
                 const allOrders: FullOrder[] = Array.isArray(result.data) 
                     ? result.data.filter((o: any) => o !== null && typeof o === 'object') 
                     : [];
                 
-                const teamOrders = allOrders.filter(o => o.Team === team);
+                // --- DATA ENRICHMENT START ---
+                const enrichedOrders = allOrders.map(order => {
+                    // SAFEGUARD: Cast to string
+                    let derivedTeam = String(order.Team || '').trim();
+                    const orderUser = String(order.User || '').trim();
+                    
+                    if (!derivedTeam && orderUser && appData.users) {
+                        const foundUser = appData.users.find((u: User) => 
+                            u && u.UserName && 
+                            String(u.UserName).toLowerCase().trim() === orderUser.toLowerCase()
+                        );
+                        
+                        if (foundUser && foundUser.Team) {
+                            const teams = String(foundUser.Team).split(',').map(t => t.trim()).filter(Boolean);
+                            if (teams.length > 0) {
+                                derivedTeam = teams[0];
+                            }
+                        }
+                    }
+                    return { ...order, Team: derivedTeam };
+                });
+                // --- DATA ENRICHMENT END ---
+
+                const targetTeam = String(team).toLowerCase().trim();
+                const teamOrders = enrichedOrders.filter(o => String(o.Team || '').toLowerCase().trim() === targetTeam);
 
                 const parsed = teamOrders.map(o => {
                     let products = [];
                     try {
                         if (o['Products (JSON)'] && typeof o['Products (JSON)'] === 'string') {
-                            products = JSON.parse(o['Products (JSON)']);
+                            const parsedProducts = JSON.parse(o['Products (JSON)']);
+                            // SAFEGUARD: Ensure result is an array
+                            products = Array.isArray(parsedProducts) ? parsedProducts : [];
                         }
                     } catch(e) { 
                         console.error("Failed to parse products JSON for order:", o['Order ID'], o['Products (JSON)']);
+                        products = [];
                     }
                     return { ...o, Products: products };
                 });
 
-                // SAFEGUARD: Safe sorting for timestamps
                 parsed.sort((a, b) => {
                     const tA = a.Timestamp ? new Date(a.Timestamp).getTime() : 0;
                     const tB = b.Timestamp ? new Date(b.Timestamp).getTime() : 0;
@@ -69,17 +95,17 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
             }
         };
         fetchOrders();
-    }, [team]);
+    }, [team, appData.users]); 
     
     const filteredOrders = useMemo(() => {
         if (!searchQuery.trim()) return orders;
         const lowerQuery = searchQuery.toLowerCase().trim();
         return orders.filter(o => 
-            (o['Order ID'] || '').toLowerCase().includes(lowerQuery) ||
-            (o['Customer Name'] || '').toLowerCase().includes(lowerQuery) ||
-            (o['Customer Phone'] || '').includes(lowerQuery) ||
-            (o.User && o.User.toLowerCase().includes(lowerQuery)) ||
-            (o.Products && Array.isArray(o.Products) && o.Products.some(p => (p.name || '').toLowerCase().includes(lowerQuery)))
+            String(o['Order ID'] || '').toLowerCase().includes(lowerQuery) ||
+            String(o['Customer Name'] || '').toLowerCase().includes(lowerQuery) ||
+            String(o['Customer Phone'] || '').includes(lowerQuery) ||
+            String(o.User || '').toLowerCase().includes(lowerQuery) ||
+            (Array.isArray(o.Products) && o.Products.some(p => String(p.name || '').toLowerCase().includes(lowerQuery)))
         );
     }, [orders, searchQuery]);
 
@@ -119,13 +145,11 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
     const [view, setView] = useState<'list' | 'create'>('list');
     const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
 
-    // Filter and clean team names
     const userTeams = useMemo(() => {
         if (!currentUser?.Team) return [];
         return currentUser.Team.split(',').map(t => t.trim()).filter(Boolean);
     }, [currentUser]);
 
-    // Manage Chat Visibility based on view
     useEffect(() => {
         if (view === 'create') {
             setChatVisibility(false);
@@ -135,14 +159,12 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
         return () => setChatVisibility(true);
     }, [view, setChatVisibility]);
 
-    // Auto-select team if user has only one
     useEffect(() => {
         if (userTeams.length === 1 && !selectedTeam) {
             setSelectedTeam(userTeams[0]);
         }
     }, [userTeams, selectedTeam]);
 
-    // CASE 1: No Team Assigned
     if (userTeams.length === 0) {
         return (
             <div className="w-full max-w-2xl mx-auto page-card text-center p-12 mt-20">
@@ -158,7 +180,6 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
         )
     }
 
-    // CASE 2: Team Selection (Multi-team user)
     if (userTeams.length > 1 && !selectedTeam) {
         return (
              <div className="w-full max-w-5xl mx-auto p-4 mt-10 md:mt-20 animate-fade-in">
@@ -167,7 +188,6 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
                 `}</style>
                 
                 <div className="flex justify-start mb-8 relative z-10">
-                    {/* Only show Back button if user is System Admin */}
                     {currentUser?.IsSystemAdmin && (
                         <button 
                             onClick={onBackToRoleSelect} 
@@ -207,8 +227,7 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
         )
     }
 
-    // CASE 3: Inside a Team (View List or Create)
-    if (!selectedTeam) return null; // Should be handled by logic above
+    if (!selectedTeam) return null;
 
     if (view === 'create') {
         return <CreateOrderPage team={selectedTeam} onSaveSuccess={() => setView('list')} onCancel={() => setView('list')} />;
@@ -219,7 +238,6 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                 <div>
                     <div className="flex items-center gap-3 mb-2">
-                        {/* Only show Back button here if user is System Admin */}
                         {currentUser?.IsSystemAdmin && (
                             <button onClick={onBackToRoleSelect} className="btn btn-secondary !py-1 !px-2 text-xs flex items-center gap-1" title="Back to Role Selection">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">

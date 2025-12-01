@@ -1,10 +1,3 @@
-import React, { useState, useRef, useEffect, useMemo, useContext, useCallback } from 'react';
-import { MasterProduct } from '../../types';
-import { convertGoogleDriveUrl } from '../../utils/fileUtils';
-import { AppContext } from '../../App';
-import { WEB_APP_URL } from '../../constants';
-import Spinner from './Spinner';
-
 // Helper to highlight search terms in results
 const highlightMatch = (text: string, query: string) => {
     if (!query || !text) return <span>{text}</span>;
@@ -24,9 +17,9 @@ const highlightMatch = (text: string, query: string) => {
 
 // A more robust, word-based relevance scoring algorithm
 const getRelevanceScore = (product: MasterProduct, query: string): number => {
-    const pName = (product.ProductName || '').toLowerCase();
-    const pBarcode = (product.Barcode || '').toLowerCase();
-    const pTags = (product.Tags || '').toLowerCase();
+    const pName = String(product.ProductName || '').toLowerCase();
+    const pBarcode = String(product.Barcode || '').toLowerCase();
+    const pTags = String(product.Tags || '').toLowerCase();
     const searchableText = `${pName} ${pBarcode} ${pTags}`;
     
     const q = query.toLowerCase().trim();
@@ -68,6 +61,13 @@ const getRelevanceScore = (product: MasterProduct, query: string): number => {
     return score;
 };
 
+// ... (rest of the file remains unchanged)
+import React, { useState, useRef, useEffect, useMemo, useContext, useCallback } from 'react';
+import { MasterProduct } from '../../types';
+import { convertGoogleDriveUrl } from '../../utils/fileUtils';
+import { AppContext } from '../../App';
+import { WEB_APP_URL } from '../../constants';
+import Spinner from './Spinner';
 
 // --- START: ProductTagEditor Component ---
 const ProductTagEditor: React.FC<{
@@ -82,7 +82,7 @@ const ProductTagEditor: React.FC<{
 
     useEffect(() => {
         if (selectedProduct && selectedProduct.Tags) {
-            setTags(selectedProduct.Tags.split(',').map(t => t.trim()).filter(Boolean));
+            setTags(String(selectedProduct.Tags).split(',').map(t => t.trim()).filter(Boolean));
         } else {
             setTags([]);
         }
@@ -121,7 +121,7 @@ const ProductTagEditor: React.FC<{
             setError((err as Error).message);
             // Revert UI state on failure
             if (selectedProduct && selectedProduct.Tags) {
-                setTags(selectedProduct.Tags.split(',').map(t => t.trim()).filter(Boolean));
+                setTags(String(selectedProduct.Tags).split(',').map(t => t.trim()).filter(Boolean));
             } else {
                 setTags([]);
             }
@@ -189,10 +189,11 @@ interface SearchableProductDropdownProps {
     products: MasterProduct[];
     selectedProductName: string;
     onSelect: (productName: string) => void;
+    showTagEditor?: boolean;
 }
 
 // --- START: REFACTORED Dropdown Component ---
-const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ products, selectedProductName, onSelect }) => {
+const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ products, selectedProductName, onSelect, showTagEditor = true }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
@@ -227,14 +228,24 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         return products
             .map(product => ({ product, score: getRelevanceScore(product, query) }))
             .filter(p => p.score > 0)
-            .sort((a, b) => b.score - a.score || a.product.ProductName.localeCompare(b.product.ProductName))
+            .sort((a, b) => {
+                // Primary sort: Score
+                const scoreDiff = b.score - a.score;
+                if (scoreDiff !== 0) return scoreDiff;
+                
+                // Secondary sort: Alphabetical (Safeguard against numbers)
+                const nameA = String(a.product.ProductName || '');
+                const nameB = String(b.product.ProductName || '');
+                return nameA.localeCompare(nameB);
+            })
             .map(p => p.product);
     }, [products, searchTerm]);
     
     const canAddNewProduct = useMemo(() => {
         const trimmedSearch = searchTerm.trim();
         if (!trimmedSearch) return false;
-        return !products.some(p => p.ProductName.trim().toLowerCase() === trimmedSearch.toLowerCase());
+        // SAFEGUARD: Ensure comparison happens against strings
+        return !products.some(p => String(p.ProductName || '').trim().toLowerCase() === trimmedSearch.toLowerCase());
     }, [searchTerm, products]);
 
     const itemsForNavigation = useMemo(() => {
@@ -335,7 +346,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                 </div>
             </div>
             
-            {selectedProductName && selectedProduct && (
+            {selectedProductName && selectedProduct && showTagEditor && (
                 <ProductTagEditor selectedProduct={selectedProduct} />
             )}
 
@@ -392,11 +403,11 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                                     <div className="flex-grow overflow-hidden">
                                         <p className="font-semibold truncate">{highlightMatch(product.ProductName, searchTerm)}</p>
                                         <p className="text-xs text-gray-400 truncate">
-                                            Barcode: {product.Barcode ? highlightMatch(product.Barcode, searchTerm) : 'N/A'} | Price: ${product.Price.toFixed(2)}
+                                            Barcode: {product.Barcode ? highlightMatch(String(product.Barcode), searchTerm) : 'N/A'} | Price: ${product.Price.toFixed(2)}
                                         </p>
                                         {product.Tags && (
                                             <p className="text-xs text-blue-300 truncate mt-1">
-                                                Tags: {highlightMatch(product.Tags, searchTerm)}
+                                                Tags: {highlightMatch(String(product.Tags), searchTerm)}
                                             </p>
                                         )}
                                     </div>

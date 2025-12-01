@@ -1,9 +1,9 @@
 import React, { useState, useContext, useMemo, useEffect } from 'react';
 import { AppContext } from '../App';
-import { ParsedOrder, ShippingMethod, Driver, MasterProduct, BankAccount } from '../types';
+import { ParsedOrder, ShippingMethod, Driver, MasterProduct, BankAccount, User } from '../types';
 import ReportsView from '../components/admin/ReportsView';
 import Spinner from '../components/common/Spinner';
-import Modal from '../components/common/Modal'; // NEW: Import Modal for desktop
+import Modal from '../components/common/Modal';
 import { WEB_APP_URL } from '../constants';
 
 interface ReportDashboardProps {
@@ -92,7 +92,6 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
                 const result = await response.json();
                 if (result.status !== 'success') throw new Error(result.message || 'Error fetching orders');
                 
-                // SAFEGUARD: Ensure data is an array and filter out NULL items specifically
                 const rawOrders: any[] = Array.isArray(result.data) 
                     ? result.data.filter((o: any) => o !== null && typeof o === 'object') 
                     : [];
@@ -101,7 +100,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
                     let products = [];
                     try {
                         const parsedProducts = JSON.parse(o['Products (JSON)'] || '[]');
-                        // Ensure it's an array
+                        // SAFEGUARD: Ensure result is an array
                         products = Array.isArray(parsedProducts) ? parsedProducts : [];
                     } catch (e) {
                         products = [];
@@ -117,6 +116,32 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
         };
         fetchAllOrders();
     }, []);
+
+    // 1. Enrich Orders for Reports: Infer Team if missing (Frontend Fix)
+    const enrichedOrders = useMemo(() => {
+        if (!orders) return [];
+        return orders.map(order => {
+            // SAFEGUARD: Cast to string
+            let derivedTeam = String(order.Team || '').trim();
+            const orderUser = String(order.User || '').trim();
+            
+            if (!derivedTeam && orderUser && appData.users) {
+                const foundUser = appData.users.find((u: User) => 
+                    u && u.UserName && 
+                    String(u.UserName).toLowerCase().trim() === orderUser.toLowerCase()
+                );
+                
+                if (foundUser && foundUser.Team) {
+                    const teams = String(foundUser.Team).split(',').map(t => t.trim()).filter(Boolean);
+                    if (teams.length > 0) {
+                        derivedTeam = teams[0];
+                    }
+                }
+            }
+            
+            return { ...order, Team: derivedTeam };
+        });
+    }, [orders, appData.users]);
 
 
     const toLocalYYYYMMDD = (d: Date) => {
@@ -199,20 +224,31 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
     }, []);
 
     const filteredOrders = useMemo(() => {
-        return orders.filter(order => {
+        return enrichedOrders.filter(order => {
             if (filters.datePreset !== 'all') {
                 const startDate = filters.startDate ? new Date(`${filters.startDate}T00:00:00`) : null;
                 const endDate = filters.endDate ? new Date(`${filters.endDate}T23:59:59`) : null;
                 
-                // SAFEGUARD
                 if (!order.Timestamp) return false;
 
                 const orderDate = new Date(order.Timestamp);
                 if (startDate && orderDate < startDate) return false;
                 if (endDate && orderDate > endDate) return false;
             }
-            if (filters.team && order.Team !== filters.team) return false;
-            if (filters.user && order.User !== filters.user) return false;
+            
+            // SAFEGUARD: Cast to string
+            if (filters.team) {
+                const orderTeam = String(order.Team || '').toLowerCase().trim();
+                const filterTeam = String(filters.team).toLowerCase().trim();
+                if (orderTeam !== filterTeam) return false;
+            }
+
+            if (filters.user) {
+                const orderUser = String(order.User || '').toLowerCase().trim();
+                const filterUser = String(filters.user).toLowerCase().trim();
+                if (orderUser !== filterUser) return false;
+            }
+            
             if (filters.paymentStatus && order['Payment Status'] !== filters.paymentStatus) return false;
             if (filters.shippingService && order['Internal Shipping Method'] !== filters.shippingService) return false;
             if (filters.driver && order['Internal Shipping Details'] !== filters.driver) return false;
@@ -221,7 +257,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
             return true;
         });
-    }, [orders, filters]);
+    }, [enrichedOrders, filters]);
 
     const renderContent = () => {
         if (ordersLoading) {
@@ -269,7 +305,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
                     <label className="input-label">Team</label>
                     <select value={filters.team} onChange={e => handleFilterChange('team', e.target.value)} className="form-select">
                         <option value="">All Teams</option>
-                        {Array.from(new Set(orders.map(o => o.Team).filter(Boolean))).map(t => <option key={t} value={t}>{t}</option>)}
+                        {Array.from(new Set(enrichedOrders.map(o => o.Team).filter(Boolean))).map(t => <option key={String(t)} value={String(t)}>{String(t)}</option>)}
                     </select>
                 </div>
                 <div>
@@ -323,14 +359,11 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
         <div className="w-full h-full min-h-[calc(100vh-6rem)] max-w-7xl mx-auto p-2 sm:p-4 lg:p-6 animate-fade-in">
              <style>{`.animate-fade-in { animation: fadeIn 0.5s ease-in-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
             
-            {/* --- MODALS & PANELS (Responsive) --- */}
-            {/* Mobile: Bottom Sheet */}
             <div className="md:hidden">
                 <FilterPanel isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)}>
                     <FiltersComponent />
                 </FilterPanel>
             </div>
-            {/* Desktop: Centered Modal */}
             <div className="hidden md:block">
                 <Modal isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} maxWidth="max-w-4xl">
                     <div className="flex justify-between items-center p-4 border-b border-gray-700">
