@@ -328,6 +328,7 @@ const AdminDashboard: React.FC = () => {
         default:
             return <AdminDashboardContent />;
     }
-};
+};​
+
 
 export default AdminDashboard;
