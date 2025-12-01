@@ -20,32 +20,47 @@ const calculateProfit = (order: ParsedOrder): number => {
     return revenue - productCost - shippingCost;
 };
 
+const getSafeMonthString = (timestamp: string): string => {
+    try {
+        if (!timestamp) return 'Unknown';
+        const date = new Date(timestamp);
+        if (isNaN(date.getTime())) return 'Unknown';
+        return date.toISOString().slice(0, 7); // YYYY-MM
+    } catch (e) {
+        return 'Unknown';
+    }
+}
+
 export const usePerformanceData = (
     orders: ParsedOrder[],
     users: User[],
     targets: Target[] // Can be from props or mock
 ) => {
     const performanceData = useMemo(() => {
-        if (!orders || !users) {
+        // SAFEGUARD: Ensure inputs are arrays
+        if (!Array.isArray(orders) || !Array.isArray(users)) {
             return null;
         }
 
         const actualTargets = (targets && targets.length > 0) ? targets : mockTargets;
 
         // Overall Summary
-        const totalRevenue = orders.reduce((sum, o) => sum + o['Grand Total'], 0);
-        const totalProfit = orders.reduce((sum, o) => sum + calculateProfit(o), 0);
+        const totalRevenue = orders.reduce((sum, o) => sum + (o ? (o['Grand Total'] || 0) : 0), 0);
+        const totalProfit = orders.reduce((sum, o) => sum + (o ? calculateProfit(o) : 0), 0);
         const totalOrders = orders.length;
 
-        const byUser = users.map(user => {
-            const userOrders = orders.filter(o => o.User === user.UserName);
-            const revenue = userOrders.reduce((sum, o) => sum + o['Grand Total'], 0);
+        const byUser = users.filter(Boolean).map(user => {
+            const userOrders = orders.filter(o => o && o.User === user.UserName);
+            const revenue = userOrders.reduce((sum, o) => sum + (o['Grand Total'] || 0), 0);
             const profit = userOrders.reduce((sum, o) => sum + calculateProfit(o), 0);
             const orderCount = userOrders.length;
             
             // Find target for the latest month available in orders
-            const latestOrderMonth = orders.length > 0 ? new Date(orders[0].Timestamp).toISOString().slice(0, 7) : new Date().toISOString().slice(0,7);
-            const targetData = actualTargets.find(t => t.UserName === user.UserName && t.Month === latestOrderMonth);
+            const latestOrderMonth = orders.length > 0 && orders[0] && orders[0].Timestamp 
+                ? getSafeMonthString(orders[0].Timestamp)
+                : getSafeMonthString(new Date().toISOString());
+                
+            const targetData = actualTargets.find(t => t && t.UserName === user.UserName && t.Month === latestOrderMonth);
             const targetAmount = targetData?.TargetAmount || 0;
             const achievement = targetAmount > 0 ? (revenue / targetAmount) * 100 : 0;
 
@@ -62,7 +77,7 @@ export const usePerformanceData = (
             };
         });
 
-        const byTeam = Array.from(new Set(users.map(u => u.Team).filter(Boolean)))
+        const byTeam = Array.from(new Set(users.map(u => u?.Team).filter(Boolean)))
             .map(team => {
                 const teamUsers = byUser.filter(u => u.team === team);
                 const revenue = teamUsers.reduce((sum, u) => sum + u.revenue, 0);
@@ -86,11 +101,14 @@ export const usePerformanceData = (
 
         // Monthly Trend Data
         const monthlyTrend = orders.reduce((acc, order) => {
-            const month = new Date(order.Timestamp).toISOString().slice(0, 7); // YYYY-MM
+            if (!order) return acc;
+            
+            const month = getSafeMonthString(order.Timestamp);
+            
             if (!acc[month]) {
                 acc[month] = { revenue: 0, profit: 0, orders: 0 };
             }
-            acc[month].revenue += order['Grand Total'];
+            acc[month].revenue += (order['Grand Total'] || 0);
             acc[month].profit += calculateProfit(order);
             acc[month].orders += 1;
             return acc;

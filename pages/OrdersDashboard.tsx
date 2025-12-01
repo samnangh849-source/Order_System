@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, useEffect, useMemo } from 'react';
 import { AppContext } from '../App';
 import Spinner from '../components/common/Spinner';
@@ -103,7 +102,9 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
                 throw new Error(result.message || 'Error in API response for orders.');
             }
             
-            const rawOrders: FullOrder[] = result.data;
+            // SAFEGUARD: Ensure data is an array
+            const rawOrders: FullOrder[] = Array.isArray(result.data) ? result.data : [];
+            
             const parsed = rawOrders.map(o => {
                 let products = [];
                 try {
@@ -115,7 +116,12 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
                 }
                 return { ...o, Products: products };
             });
-            parsed.sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
+            // SAFEGUARD: Check timestamps
+            parsed.sort((a, b) => {
+                const timeA = a.Timestamp ? new Date(a.Timestamp).getTime() : 0;
+                const timeB = b.Timestamp ? new Date(b.Timestamp).getTime() : 0;
+                return timeB - timeA;
+            });
             setAllOrders(parsed);
         } catch (err: any) {
             let friendlyErrorMessage = `មិនអាចទាញយកប្រតិបត្តិការណ៍បានទេ: ${err.message}`;
@@ -217,6 +223,10 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
             if (filters.datePreset !== 'all') {
                 const startDate = filters.startDate ? new Date(`${filters.startDate}T00:00:00`) : null;
                 const endDate = filters.endDate ? new Date(`${filters.endDate}T23:59:59`) : null;
+                
+                // SAFEGUARD: Check if timestamp exists
+                if (!order.Timestamp) return false;
+                
                 const orderDate = new Date(order.Timestamp);
                 if (startDate && orderDate < startDate) return false;
                 if (endDate && orderDate > endDate) return false;
@@ -227,7 +237,8 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
             if (filters.shippingService && order['Internal Shipping Method'] !== filters.shippingService) return false;
             if (filters.driver && order['Internal Shipping Details'] !== filters.driver) return false;
             if (filters.bank && order['Payment Info'] !== filters.bank) return false;
-            if (filters.product && !order.Products.some(p => p.name === filters.product)) return false;
+            // SAFEGUARD: Check Products array
+            if (filters.product && (!order.Products || !order.Products.some(p => p.name === filters.product))) return false;
 
             return true;
         });
@@ -235,15 +246,17 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         if (searchQuery.trim()) {
             const lowercasedQuery = searchQuery.toLowerCase().trim();
             ordersToFilter = ordersToFilter.filter(order => {
+                // SAFEGUARD: Handle undefined/null properties
                 const searchableFields = [
-                    order['Order ID'],
-                    order['Customer Name'],
-                    order['Customer Phone'],
-                    order.User,
-                    order.Page,
+                    order['Order ID'] || '',
+                    order['Customer Name'] || '',
+                    order['Customer Phone'] || '',
+                    order.User || '',
+                    order.Page || '',
                 ].join(' ').toLowerCase();
 
-                const productsString = order.Products.map(p => p.name).join(' ').toLowerCase();
+                // SAFEGUARD: Handle undefined/null Products array
+                const productsString = (order.Products || []).map(p => p.name || '').join(' ').toLowerCase();
 
                 return searchableFields.includes(lowercasedQuery) || productsString.includes(lowercasedQuery);
             });

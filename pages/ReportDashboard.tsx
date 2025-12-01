@@ -15,7 +15,7 @@ type ReportType = 'overview' | 'performance' | 'profitability' | 'forecasting' |
 type DateRangePreset = 'all' | 'today' | 'last_day' | 'this_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'week1' | 'week2' | 'week3' | 'week4' | 'custom';
 
 const reportSections: {id: ReportType, title: string, icon: React.ReactElement}[] = [
-    { id: 'overview', title: 'ទិដ្ឋភាពទូទៅ', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg> },
+    { id: 'overview', title: 'ទិដ្ឋភាពទូទៅ', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg> },
     { id: 'performance', title: 'ការអនុវត្ត', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 7L21 7" /><path strokeLinecap="round" strokeLinejoin="round" d="M13 17L21 17" /><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L18 12" /><path strokeLinecap="round" strokeLinejoin="round" d="M3 21L21 3" /></svg> },
     { id: 'profitability', title: 'ប្រាក់ចំណេញ', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg> },
     { id: 'forecasting', title: 'ការព្យាករណ៍', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> },
@@ -92,8 +92,19 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
                 const result = await response.json();
                 if (result.status !== 'success') throw new Error(result.message || 'Error fetching orders');
                 
-                const rawOrders: any[] = result.data;
-                const parsed = rawOrders.map(o => ({ ...o, Products: JSON.parse(o['Products (JSON)'] || '[]') }));
+                // SAFEGUARD: Ensure data is an array
+                const rawOrders: any[] = Array.isArray(result.data) ? result.data : [];
+                const parsed = rawOrders.map(o => {
+                    let products = [];
+                    try {
+                        const parsedProducts = JSON.parse(o['Products (JSON)'] || '[]');
+                        // Ensure it's an array
+                        products = Array.isArray(parsedProducts) ? parsedProducts : [];
+                    } catch (e) {
+                        products = [];
+                    }
+                    return { ...o, Products: products };
+                });
                 setOrders(parsed);
             } catch (err: any) {
                 setOrdersError(err.message);
@@ -189,6 +200,10 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
             if (filters.datePreset !== 'all') {
                 const startDate = filters.startDate ? new Date(`${filters.startDate}T00:00:00`) : null;
                 const endDate = filters.endDate ? new Date(`${filters.endDate}T23:59:59`) : null;
+                
+                // SAFEGUARD
+                if (!order.Timestamp) return false;
+
                 const orderDate = new Date(order.Timestamp);
                 if (startDate && orderDate < startDate) return false;
                 if (endDate && orderDate > endDate) return false;
@@ -199,7 +214,7 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
             if (filters.shippingService && order['Internal Shipping Method'] !== filters.shippingService) return false;
             if (filters.driver && order['Internal Shipping Details'] !== filters.driver) return false;
             if (filters.bank && order['Payment Info'] !== filters.bank) return false;
-            if (filters.product && !order.Products.some(p => p.name === filters.product)) return false;
+            if (filters.product && (!Array.isArray(order.Products) || !order.Products.some(p => p.name === filters.product))) return false;
 
             return true;
         });

@@ -35,7 +35,8 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
                     throw new Error(result.message || 'Error in API response for orders.');
                 }
                 
-                const allOrders: FullOrder[] = result.data;
+                // SAFEGUARD: Ensure data is an array, default to empty array if null
+                const allOrders: FullOrder[] = Array.isArray(result.data) ? result.data : [];
                 const teamOrders = allOrders.filter(o => o.Team === team);
 
                 const parsed = teamOrders.map(o => {
@@ -50,7 +51,13 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
                     return { ...o, Products: products };
                 });
 
-                parsed.sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
+                // SAFEGUARD: Safe sorting for timestamps
+                parsed.sort((a, b) => {
+                    const tA = a.Timestamp ? new Date(a.Timestamp).getTime() : 0;
+                    const tB = b.Timestamp ? new Date(b.Timestamp).getTime() : 0;
+                    return tB - tA;
+                });
+                
                 setOrders(parsed);
             } catch (err: any) {
                 setError(`Could not load team orders: ${err.message}`);
@@ -65,11 +72,11 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
         if (!searchQuery.trim()) return orders;
         const lowerQuery = searchQuery.toLowerCase().trim();
         return orders.filter(o => 
-            o['Order ID'].toLowerCase().includes(lowerQuery) ||
-            o['Customer Name'].toLowerCase().includes(lowerQuery) ||
-            o['Customer Phone'].includes(lowerQuery) ||
+            (o['Order ID'] || '').toLowerCase().includes(lowerQuery) ||
+            (o['Customer Name'] || '').toLowerCase().includes(lowerQuery) ||
+            (o['Customer Phone'] || '').includes(lowerQuery) ||
             (o.User && o.User.toLowerCase().includes(lowerQuery)) ||
-            (o.Products && o.Products.some(p => p.name.toLowerCase().includes(lowerQuery)))
+            (o.Products && Array.isArray(o.Products) && o.Products.some(p => (p.name || '').toLowerCase().includes(lowerQuery)))
         );
     }, [orders, searchQuery]);
 
