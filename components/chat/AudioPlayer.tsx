@@ -39,7 +39,10 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
 
         const onError = () => {
             const err = media.error;
-            console.error(`Media Error: Code ${err?.code}, Message: ${err?.message}`);
+            // Only log if src is present to avoid noise on initial render
+            if (media.src && media.src !== window.location.href) {
+                console.error(`Media Error: Code ${err?.code}, Message: ${err?.message}`);
+            }
             let errorMessage = 'Could not play audio.';
             if (err?.code === 4) { // MEDIA_ERR_SRC_NOT_SUPPORTED
                  errorMessage = 'Audio format not supported or source unavailable.';
@@ -49,8 +52,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
         };
         
         const onStalled = () => {
-            // Only warn if we actually have a source we are trying to play
-            if (media.src && media.src !== window.location.href) {
+            // Only warn if we actually have a valid source we are trying to play
+            if (media.src && media.src !== window.location.href && isPlaying) {
                 console.warn("Media playback stalled due to insufficient data.");
             }
         };
@@ -63,29 +66,25 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
         media.addEventListener('stalled', onStalled);
 
         // --- Source Loading Logic ---
-        // This consolidated check is the key fix. It prevents reloading the audio if the component 
-        // re-renders but the src prop is the same as what the media element already has.
         if (media.src !== src) {
-            // Reset all state for the new source. This shows the loading spinner.
+            // Reset all state for the new source.
             setIsPlaying(false);
             setIsReady(false);
             setError(null);
             setDuration(0);
             setCurrentTime(0);
 
-            if (src) {
+            if (src && src.trim() !== '') {
                 media.src = src;
                 media.load();
             } else {
-                // Handle src being explicitly removed
                 media.pause();
                 media.removeAttribute('src');
-                // Ensure we don't try to load an empty src which causes stalled errors
-                media.load(); 
+                // Don't call load() on empty src to avoid error
             }
         }
 
-        // --- Cleanup on unmount or when src changes ---
+        // --- Cleanup on unmount ---
         return () => {
             media.removeEventListener('canplay', onReady);
             media.removeEventListener('timeupdate', onTimeUpdate);
@@ -96,7 +95,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
     }, [src]);
 
     const togglePlayPause = () => {
-        if (!isReady || error) return;
+        if (!isReady || error || !src) return;
         const media = mediaRef.current;
         if (!media) return;
 
@@ -104,15 +103,14 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
             media.pause();
             setIsPlaying(false);
         } else {
-            setIsPlaying(true); // Optimistic update
+            setIsPlaying(true);
             const playPromise = media.play();
             if (playPromise !== undefined) {
                 playPromise.catch(err => {
-                    // Ignore AbortError, which is expected on component unmount
                     if (err.name !== 'AbortError') {
                         console.error('Playback failed:', err);
                         setError("Playback failed.");
-                        setIsPlaying(false); // Revert state on actual error
+                        setIsPlaying(false);
                     }
                 });
             }
@@ -128,7 +126,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
         const clickX = e.clientX - rect.left;
         const percentage = Math.min(Math.max(clickX / progressBar.offsetWidth, 0), 1);
         media.currentTime = percentage * duration;
-        setCurrentTime(media.currentTime); // Update state immediately for better UX
+        setCurrentTime(media.currentTime);
     };
 
     const formatTime = (timeInSeconds: number) => {
@@ -147,7 +145,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
     return (
         <div className="audio-player">
             <video ref={mediaRef} preload="metadata" style={{ display: 'none' }} playsInline />
-            <button onClick={togglePlayPause} className="play-pause-btn" aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isReady}>
+            <button onClick={togglePlayPause} className="play-pause-btn" aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isReady || !src}>
                 {!isReady ? <Spinner size="sm"/> : 
                 isPlaying ? (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">

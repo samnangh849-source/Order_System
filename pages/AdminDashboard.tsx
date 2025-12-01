@@ -51,11 +51,20 @@ const AdminDashboard: React.FC = () => {
                             // SAFEGUARD: Ensure result.data is an array and filter out nulls
                             const orders: FullOrder[] = Array.isArray(result.data) ? result.data.filter((o: any) => o !== null) : [];
                             
-                            // Get today's date in YYYY-MM-DD format based on local time or UTC as per your requirement
-                            const today = new Date();
-                            const todayStr = today.toISOString().slice(0, 10);
+                            // Correct "Today" Calculation:
+                            // We must use the browser's local time to determine "Today", rather than comparing UTC strings.
+                            // The backend returns an ISO string (likely UTC). We create a Date object from it,
+                            // which automatically adjusts to the browser's system timezone.
+                            const now = new Date();
                             
-                            const todayOrdersList = orders.filter(o => o && o.Timestamp && o.Timestamp.startsWith(todayStr));
+                            const todayOrdersList = orders.filter(o => {
+                                if (!o || !o.Timestamp) return false;
+                                const orderDate = new Date(o.Timestamp);
+                                return orderDate.getDate() === now.getDate() &&
+                                       orderDate.getMonth() === now.getMonth() &&
+                                       orderDate.getFullYear() === now.getFullYear();
+                            });
+
                             const revenue = todayOrdersList.reduce((sum, o) => sum + (Number(o['Grand Total']) || 0), 0);
                             const pending = orders.filter(o => o && o['Payment Status'] === 'Unpaid').length;
 
