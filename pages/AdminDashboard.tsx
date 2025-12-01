@@ -52,17 +52,15 @@ const AdminDashboard: React.FC = () => {
                             const orders: FullOrder[] = Array.isArray(result.data) ? result.data.filter((o: any) => o !== null) : [];
                             
                             // Correct "Today" Calculation:
-                            // We must use the browser's local time to determine "Today", rather than comparing UTC strings.
-                            // The backend returns an ISO string (likely UTC). We create a Date object from it,
-                            // which automatically adjusts to the browser's system timezone.
+                            // We construct a local "YYYY-MM-DD" string for comparison.
                             const now = new Date();
+                            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                             
                             const todayOrdersList = orders.filter(o => {
                                 if (!o || !o.Timestamp) return false;
                                 const orderDate = new Date(o.Timestamp);
-                                return orderDate.getDate() === now.getDate() &&
-                                       orderDate.getMonth() === now.getMonth() &&
-                                       orderDate.getFullYear() === now.getFullYear();
+                                const orderDateStr = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
+                                return orderDateStr === todayStr;
                             });
 
                             const revenue = todayOrdersList.reduce((sum, o) => sum + (Number(o['Grand Total']) || 0), 0);

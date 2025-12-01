@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, useRef, useEffect } from 'react';
 import { AppContext } from '../../App';
 import EditProfileModal from './EditProfileModal';

@@ -142,6 +142,11 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
         return <div className="text-red-400 text-xs px-2 py-1 flex items-center">{error}</div>;
     }
     
+    // Only render player UI if there is a valid source
+    if (!src) {
+        return null; 
+    }
+    
     return (
         <div className="audio-player">
             <video ref={mediaRef} preload="metadata" style={{ display: 'none' }} playsInline />

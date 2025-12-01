@@ -82,7 +82,8 @@ const App: React.FC = () => {
     // Initialize Gemini AI using environment variable
     useEffect(() => {
         try {
-            if (process.env.API_KEY) {
+            // Check if API_KEY exists and is not empty before initializing to prevent crashes
+            if (process.env.API_KEY && process.env.API_KEY.trim() !== '') {
                 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
                 setGeminiAi(ai);
             } else {
