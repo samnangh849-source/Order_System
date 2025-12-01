@@ -92,8 +92,11 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
                 const result = await response.json();
                 if (result.status !== 'success') throw new Error(result.message || 'Error fetching orders');
                 
-                // SAFEGUARD: Ensure data is an array
-                const rawOrders: any[] = Array.isArray(result.data) ? result.data : [];
+                // SAFEGUARD: Ensure data is an array and filter out NULL items specifically
+                const rawOrders: any[] = Array.isArray(result.data) 
+                    ? result.data.filter((o: any) => o !== null && typeof o === 'object') 
+                    : [];
+                
                 const parsed = rawOrders.map(o => {
                     let products = [];
                     try {

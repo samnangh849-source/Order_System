@@ -6,6 +6,7 @@ import GeminiButton from '../common/GeminiButton';
 import Spinner from '../common/Spinner';
 import SimpleBarChart from './SimpleBarChart';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
+import SearchableProductDropdown from '../common/SearchableProductDropdown';
 
 interface ReportsViewProps {
     orders: ParsedOrder[];
@@ -121,9 +122,11 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders: filteredOrders, allOr
     const [analysisError, setAnalysisError] = useState('');
 
     const reportData = useMemo(() => {
-        const revenue = filteredOrders.reduce((sum, o) => sum + o['Grand Total'], 0);
-        const totalProductCost = filteredOrders.reduce((sum, o) => sum + (o['Total Product Cost ($)'] || 0), 0);
-        const totalInternalCost = filteredOrders.reduce((sum, o) => sum + (o['Internal Cost'] || 0), 0);
+        if (!Array.isArray(filteredOrders)) return null;
+
+        const revenue = filteredOrders.reduce((sum, o) => sum + (Number(o['Grand Total']) || 0), 0);
+        const totalProductCost = filteredOrders.reduce((sum, o) => sum + (Number(o['Total Product Cost ($)']) || 0), 0);
+        const totalInternalCost = filteredOrders.reduce((sum, o) => sum + (Number(o['Internal Cost']) || 0), 0);
         const profit = revenue - totalProductCost - totalInternalCost;
         const totalOrders = filteredOrders.length;
         const aov = totalOrders > 0 ? revenue / totalOrders : 0;
@@ -131,19 +134,20 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders: filteredOrders, allOr
 
         const aggregateBy = (key: 'Team' | 'User' | 'Page') => {
             const aggregation = filteredOrders.reduce((acc, order) => {
-                const group = order[key];
-                if (!group) return acc;
+                // Use a fallback if the key is missing or empty
+                const group = (order[key] as string) || 'Unassigned';
+                
                 if (!acc[group]) {
                     acc[group] = { revenue: 0, profit: 0, orders: 0, label: group };
                 }
-                acc[group].revenue += order['Grand Total'];
-                const orderProfit = order['Grand Total'] - (order['Total Product Cost ($)'] || 0) - (order['Internal Cost'] || 0);
+                acc[group].revenue += (Number(order['Grand Total']) || 0);
+                const orderProfit = (Number(order['Grand Total']) || 0) - (Number(order['Total Product Cost ($)']) || 0) - (Number(order['Internal Cost']) || 0);
                 acc[group].profit += orderProfit;
                 acc[group].orders += 1;
                 return acc;
             }, {} as Record<string, { revenue: number, profit: number, orders: number, label: string }>);
 
-            return Object.values(aggregation).map(item => ({
+            return Object.values(aggregation).map((item: any) => ({
                 ...item,
                 revenueFormatted: `$${item.revenue.toFixed(2)}`,
                 profitFormatted: `$${item.profit.toFixed(2)}`,
@@ -151,16 +155,20 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders: filteredOrders, allOr
         };
 
         const byProduct = filteredOrders
-            .flatMap(order => order.Products.map(p => ({ ...p, team: order.Team, user: order.User })))
+            .flatMap(order => {
+                const products = Array.isArray(order.Products) ? order.Products : [];
+                return products.map(p => ({ ...p, team: order.Team, user: order.User }));
+            })
             .reduce((acc, product) => {
                 const masterProduct: MasterProduct | undefined = appData.products?.find((mp: MasterProduct) => mp.ProductName === product.name);
                 if (!acc[product.name]) {
                     acc[product.name] = { revenue: 0, profit: 0, quantity: 0, label: product.name, image: masterProduct?.ImageURL || '' };
                 }
-                acc[product.name].revenue += product.total;
-                const productProfit = product.total - (product.cost * product.quantity);
+                const total = Number(product.total) || 0;
+                acc[product.name].revenue += total;
+                const productProfit = total - ((Number(product.cost) || 0) * (Number(product.quantity) || 0));
                 acc[product.name].profit += productProfit;
-                acc[product.name].quantity += product.quantity;
+                acc[product.name].quantity += (Number(product.quantity) || 0);
                 return acc;
             }, {} as Record<string, { revenue: number, profit: number, quantity: number, label: string, image: string }>);
             
@@ -171,7 +179,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders: filteredOrders, allOr
             if (!acc[method]) {
                 acc[method] = { label: method, cost: 0, orders: 0, logo: methodInfo?.LogosURL || '' };
             }
-            acc[method].cost += (order['Internal Cost'] || 0);
+            acc[method].cost += (Number(order['Internal Cost']) || 0);
             acc[method].orders += 1;
             return acc;
         }, {} as Record<string, { label: string, cost: number, orders: number, logo: string }>);
@@ -184,7 +192,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders: filteredOrders, allOr
             if (!acc[driver]) {
                 acc[driver] = { label: driver, cost: 0, orders: 0, shippingService: order['Internal Shipping Method'] };
             }
-            acc[driver].cost += (order['Internal Cost'] || 0);
+            acc[driver].cost += (Number(order['Internal Cost']) || 0);
             acc[driver].orders += 1;
             return acc;
         }, {} as Record<string, { label: string, cost: number, orders: number, shippingService: string }>);
@@ -198,10 +206,10 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders: filteredOrders, allOr
             profitMargin,
             byPage: aggregateBy('Page'),
             byUser: aggregateBy('User'),
-            byProduct: Object.values(byProduct).map(item => ({...item, revenueFormatted: `$${item.revenue.toFixed(2)}`, profitFormatted: `$${item.profit.toFixed(2)}`})).sort((a, b) => b.revenue - a.revenue),
+            byProduct: Object.values(byProduct).map((item: any) => ({...item, revenueFormatted: `$${item.revenue.toFixed(2)}`, profitFormatted: `$${item.profit.toFixed(2)}`})).sort((a, b) => b.revenue - a.revenue),
             byTeam: aggregateBy('Team'),
-            byShippingMethod: Object.values(byShippingMethod).map(item => ({...item, costFormatted: `$${item.cost.toFixed(2)}`})).sort((a,b) => b.cost - a.cost),
-            byDriver: Object.values(byDriver).map(item => ({...item, costFormatted: `$${item.cost.toFixed(2)}`})).sort((a,b) => b.cost - a.cost),
+            byShippingMethod: Object.values(byShippingMethod).map((item: any) => ({...item, costFormatted: `$${item.cost.toFixed(2)}`})).sort((a,b) => b.cost - a.cost),
+            byDriver: Object.values(byDriver).map((item: any) => ({...item, costFormatted: `$${item.cost.toFixed(2)}`})).sort((a,b) => b.cost - a.cost),
         };
     }, [filteredOrders, appData]);
 
@@ -224,36 +232,40 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders: filteredOrders, allOr
         }
     };
 
-    const OverviewTab = () => (
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                 <StatCardRedesigned title="Total Revenue" value={`$${reportData.revenue.toFixed(2)}`} change="+5.4%" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} />
-                <StatCardRedesigned title="Net Profit" value={`$${reportData.profit.toFixed(2)}`} change="-2.1%" changeType="decrease" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>} />
-                <StatCardRedesigned title="Total Orders" value={reportData.totalOrders.toString()} change="+12" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
-                <StatCardRedesigned title="Avg. Order Value" value={`$${reportData.aov.toFixed(2)}`} change="+1.5%" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4z" /></svg>} />
-            </div>
-
-            {geminiAi && (
-                <div className="page-card !bg-gray-800/60 mt-6">
-                    <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-                        <h3 className="text-lg font-bold text-white">Gemini AI Analysis</h3>
-                        <GeminiButton onClick={handleAnalyze} isLoading={isAnalyzing}>
-                            Generate Insights
-                        </GeminiButton>
-                    </div>
-                    {isAnalyzing && <div className="flex justify-center"><Spinner /></div>}
-                    {analysisError && <p className="text-red-400">{analysisError}</p>}
-                    {analysisResult && (
-                        <div className="gemini-analysis whitespace-pre-wrap font-sans">
-                            {analysisResult}
-                        </div>
-                    )}
+    const OverviewTab = () => {
+        if (!reportData) return <div>No Data</div>;
+        return (
+            <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                     <StatCardRedesigned title="Total Revenue" value={`$${reportData.revenue.toFixed(2)}`} change="+5.4%" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} />
+                    <StatCardRedesigned title="Net Profit" value={`$${reportData.profit.toFixed(2)}`} change="-2.1%" changeType="decrease" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>} />
+                    <StatCardRedesigned title="Total Orders" value={reportData.totalOrders.toString()} change="+12" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
+                    <StatCardRedesigned title="Avg. Order Value" value={`$${reportData.aov.toFixed(2)}`} change="+1.5%" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4z" /></svg>} />
                 </div>
-            )}
-        </div>
-    );
+
+                {geminiAi && (
+                    <div className="page-card !bg-gray-800/60 mt-6">
+                        <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                            <h3 className="text-lg font-bold text-white">Gemini AI Analysis</h3>
+                            <GeminiButton onClick={handleAnalyze} isLoading={isAnalyzing}>
+                                Generate Insights
+                            </GeminiButton>
+                        </div>
+                        {isAnalyzing && <div className="flex justify-center"><Spinner /></div>}
+                        {analysisError && <p className="text-red-400">{analysisError}</p>}
+                        {analysisResult && (
+                            <div className="gemini-analysis whitespace-pre-wrap font-sans">
+                                {analysisResult}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     const PerformanceTab = () => {
+        if (!reportData) return null;
         const top10Products = useMemo(() => {
             return reportData.byProduct.slice(0, 10).map(p => {
                 const productInfo: MasterProduct | undefined = appData.products.find((master: MasterProduct) => master.ProductName === p.label);
@@ -278,6 +290,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders: filteredOrders, allOr
     };
 
     const ProfitabilityTab = () => {
+        if (!reportData) return null;
         const [profitView, setProfitView] = useState<ProfitView>('product');
         const [visibleColumns, setVisibleColumns] = useState(new Set(['label', 'revenueFormatted', 'profitFormatted', 'orders', 'quantity', 'image']));
         
@@ -382,6 +395,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders: filteredOrders, allOr
     };
     
     const ShippingTab = () => {
+        if (!reportData) return null;
         const [shippingView, setShippingView] = useState<ShippingCostView>('service');
         const [visibleServiceCols, setVisibleServiceCols] = useState(new Set(['logo', 'label', 'costFormatted', 'orders']));
         const [visibleDriverCols, setVisibleDriverCols] = useState(new Set(['label', 'shippingService', 'costFormatted', 'orders']));

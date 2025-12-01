@@ -35,8 +35,11 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
                     throw new Error(result.message || 'Error in API response for orders.');
                 }
                 
-                // SAFEGUARD: Ensure data is an array, default to empty array if null
-                const allOrders: FullOrder[] = Array.isArray(result.data) ? result.data : [];
+                // SAFEGUARD: Ensure data is an array and filter out NULL items specifically
+                const allOrders: FullOrder[] = Array.isArray(result.data) 
+                    ? result.data.filter((o: any) => o !== null && typeof o === 'object') 
+                    : [];
+                
                 const teamOrders = allOrders.filter(o => o.Team === team);
 
                 const parsed = teamOrders.map(o => {
