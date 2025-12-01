@@ -49,7 +49,10 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
         };
         
         const onStalled = () => {
-            console.warn("Media playback stalled due to insufficient data.");
+            // Only warn if we actually have a source we are trying to play
+            if (media.src && media.src !== window.location.href) {
+                console.warn("Media playback stalled due to insufficient data.");
+            }
         };
 
         // --- Attach Listeners ---
@@ -77,8 +80,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
                 // Handle src being explicitly removed
                 media.pause();
                 media.removeAttribute('src');
-                media.src = '';
-                media.load();
+                // Ensure we don't try to load an empty src which causes stalled errors
+                media.load(); 
             }
         }
 

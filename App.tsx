@@ -82,8 +82,12 @@ const App: React.FC = () => {
     // Initialize Gemini AI using environment variable
     useEffect(() => {
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            setGeminiAi(ai);
+            if (process.env.API_KEY) {
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                setGeminiAi(ai);
+            } else {
+                console.warn("API_KEY is missing. Gemini AI features will be disabled.");
+            }
         } catch (e) {
             console.error("Failed to initialize Gemini AI", e);
         }
@@ -360,6 +364,5 @@ const App: React.FC = () => {
         </AppContext.Provider>
     );
 };
-
 
 export default App;
