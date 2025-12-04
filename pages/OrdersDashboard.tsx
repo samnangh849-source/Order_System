@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useEffect, useMemo } from 'react';
 import { AppContext } from '../App';
 import Spinner from '../components/common/Spinner';
@@ -8,6 +9,7 @@ import { WEB_APP_URL } from '../constants';
 import Modal from '../components/common/Modal';
 import SearchableProductDropdown from '../components/common/SearchableProductDropdown';
 import { useUrlState } from '../hooks/useUrlState';
+import PdfExportModal from '../components/admin/PdfExportModal';
 
 interface OrdersDashboardProps {
     onBack: () => void;
@@ -59,6 +61,7 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
     const [ordersLoading, setOrdersLoading] = useState(true);
     const [ordersError, setOrdersError] = useState('');
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+    const [isPdfModalOpen, setIsPdfModalOpen] = useState(false); // New State for PDF Modal
     const [dateRangeDisplay, setDateRangeDisplay] = useState('');
     const [searchQuery, setSearchQuery] = useState(''); 
 
@@ -76,37 +79,27 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         monthForWeeks: new Date().toISOString().slice(0, 7), // YYYY-MM
     });
 
-    // 1. Enrich Orders: Infer Team from User if missing (Frontend Fix)
+    // 1. Enrich Orders: Infer Team from User if missing. This ensures filtering works even if data is incomplete.
     const enrichedOrders = useMemo(() => {
-        if (!allOrders) return [];
         return allOrders.map(order => {
-            // SAFEGUARD: Cast to string to prevent crashes if value is a number
-            let derivedTeam = String(order.Team || '').trim();
-            const orderUser = String(order.User || '').trim();
+            let derivedTeam = order.Team;
             
-            // If team is empty but User exists, try to find the user's team from appData
-            if (!derivedTeam && orderUser && appData.users) {
-                const foundUser = appData.users.find((u: User) => 
-                    u && u.UserName && 
-                    String(u.UserName).toLowerCase().trim() === orderUser.toLowerCase()
-                );
-                
+            // If Team is missing but User exists, try to find the user's team from appData
+            if (!derivedTeam && order.User && appData.users) {
+                const foundUser = appData.users.find((u: User) => u.UserName === order.User);
                 if (foundUser && foundUser.Team) {
-                    const teams = String(foundUser.Team).split(',').map(t => t.trim()).filter(Boolean);
-                    if (teams.length > 0) {
-                        derivedTeam = teams[0];
-                    }
+                    derivedTeam = foundUser.Team.split(',')[0].trim();
                 }
             }
             
-            return { ...order, Team: derivedTeam };
+            // Return a new object with the derived Team (if it changed)
+            return derivedTeam !== order.Team ? { ...order, Team: derivedTeam } : order;
         });
     }, [allOrders, appData.users]);
 
     const editingOrder = useMemo(() => {
         if (!editingOrderId) return null;
-        // SAFEGUARD: Cast both to string to ensure matching works even if one is number
-        return enrichedOrders.find(o => String(o['Order ID']) === String(editingOrderId)) || null;
+        return enrichedOrders.find(o => o['Order ID'] === editingOrderId) || null;
     }, [editingOrderId, enrichedOrders]);
 
     const fetchAllOrders = async () => {
@@ -130,6 +123,7 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
                 throw new Error(result.message || 'Error in API response for orders.');
             }
             
+            // SAFEGUARD: Ensure data is an array and filter out NULL items specifically
             const rawOrders: FullOrder[] = Array.isArray(result.data) 
                 ? result.data.filter((o: any) => o !== null && typeof o === 'object') 
                 : [];
@@ -138,16 +132,14 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
                 let products = [];
                 try {
                     if (o['Products (JSON)'] && typeof o['Products (JSON)'] === 'string') {
-                        const parsedProducts = JSON.parse(o['Products (JSON)']);
-                        // SAFEGUARD: Ensure result is an array
-                        products = Array.isArray(parsedProducts) ? parsedProducts : [];
+                        products = JSON.parse(o['Products (JSON)']);
                     }
                 } catch(e) { 
                     console.error("Failed to parse products JSON for order:", o['Order ID'], o['Products (JSON)']);
-                    products = [];
                 }
                 return { ...o, Products: products };
             });
+            // SAFEGUARD: Check timestamps
             parsed.sort((a, b) => {
                 const timeA = a.Timestamp ? new Date(a.Timestamp).getTime() : 0;
                 const timeB = b.Timestamp ? new Date(b.Timestamp).getTime() : 0;
@@ -158,7 +150,10 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
             let friendlyErrorMessage = `មិនអាចទាញយកប្រតិបត្តិការណ៍បានទេ: ${err.message}`;
             if (err.message && err.message.includes('cannot unmarshal number into Go struct field')) {
                 friendlyErrorMessage = `មានបញ្ហាទិន្នន័យនៅក្នុង Google Sheet!\n\n` +
-                    `Server បានបរាជ័យក្នុងការអានទិន្នន័យ។ សូមពិនិត្យមើលជួរឈរដូចជា "Customer Name" ឬ "Note" ដែលគួរតែជាអក្សរ។`;
+                    `Server បានបរាជ័យក្នុងការអានទិន្នន័យ ព្រោះជួរឈរមួយចំនួនដូចជា "Customer Name" ឬ "Note" មានផ្ទុកទិន្នន័យជាលេខ ជំនួសឱ្យអក្សរ។\n\n` +
+                    `➡️ សូមចូលទៅកាន់សន្លឹក "AllOrders" របស់អ្នក ហើយពិនិត្យមើលជួរឈរទាំងនោះ។\n` +
+                    `➡️ សូមប្រាកដថា ទិន្នន័យទាំងអស់ក្នុងជួរឈរនេះជាអក្សរ។ (ឧទាហរណ៍៖ បើមានលេខ 123 សូមប្តូរទៅជា '123)។\n` +
+                    `➡️ ដើម្បីជៀសវាងបញ្ហានេះនាពេលអនាគត សូម Format ជួរឈរទាំងមូលជា "Plain Text"។`;
             }
             setOrdersError(friendlyErrorMessage);
         } finally {
@@ -252,6 +247,7 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
                 const startDate = filters.startDate ? new Date(`${filters.startDate}T00:00:00`) : null;
                 const endDate = filters.endDate ? new Date(`${filters.endDate}T23:59:59`) : null;
                 
+                // SAFEGUARD: Check if timestamp exists
                 if (!order.Timestamp) return false;
                 
                 const orderDate = new Date(order.Timestamp);
@@ -259,24 +255,18 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
                 if (endDate && orderDate > endDate) return false;
             }
             
-            // SAFEGUARD: Cast to string before matching
-            if (filters.team) {
-                const orderTeam = String(order.Team || '').toLowerCase().trim();
-                const filterTeam = String(filters.team).toLowerCase().trim();
-                if (orderTeam !== filterTeam) return false;
-            }
+            // TEAM FILTER: Use the enriched Team field, case-insensitive
+            if (filters.team && (order.Team || '').toLowerCase() !== filters.team.toLowerCase()) return false;
             
-            if (filters.user) {
-                const orderUser = String(order.User || '').toLowerCase().trim();
-                const filterUser = String(filters.user).toLowerCase().trim();
-                if (orderUser !== filterUser) return false;
-            }
+            // USER FILTER: Case-insensitive match
+            if (filters.user && (order.User || '').toLowerCase() !== filters.user.toLowerCase()) return false;
             
             if (filters.paymentStatus && order['Payment Status'] !== filters.paymentStatus) return false;
             if (filters.shippingService && order['Internal Shipping Method'] !== filters.shippingService) return false;
             if (filters.driver && order['Internal Shipping Details'] !== filters.driver) return false;
             if (filters.bank && order['Payment Info'] !== filters.bank) return false;
-            if (filters.product && (!Array.isArray(order.Products) || !order.Products.some(p => p.name === filters.product))) return false;
+            // SAFEGUARD: Check Products array
+            if (filters.product && (!order.Products || !order.Products.some(p => p.name === filters.product))) return false;
 
             return true;
         });
@@ -284,17 +274,17 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         if (searchQuery.trim()) {
             const lowercasedQuery = searchQuery.toLowerCase().trim();
             ordersToFilter = ordersToFilter.filter(order => {
+                // SAFEGUARD: Handle undefined/null properties
                 const searchableFields = [
-                    String(order['Order ID'] || ''),
-                    String(order['Customer Name'] || ''),
-                    String(order['Customer Phone'] || ''),
-                    String(order.User || ''),
-                    String(order.Page || ''),
+                    order['Order ID'] || '',
+                    order['Customer Name'] || '',
+                    order['Customer Phone'] || '',
+                    order.User || '',
+                    order.Page || '',
                 ].join(' ').toLowerCase();
 
-                const productsString = Array.isArray(order.Products) 
-                    ? order.Products.map(p => String(p.name || '')).join(' ').toLowerCase() 
-                    : '';
+                // SAFEGUARD: Handle undefined/null Products array
+                const productsString = (order.Products || []).map(p => p.name || '').join(' ').toLowerCase();
 
                 return searchableFields.includes(lowercasedQuery) || productsString.includes(lowercasedQuery);
             });
@@ -350,7 +340,8 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
                     <label className="input-label">Team</label>
                     <select value={filters.team} onChange={e => handleFilterChange('team', e.target.value)} className="form-select">
                         <option value="">All Teams</option>
-                        {Array.from(new Set(enrichedOrders.map(o => o.Team).filter(Boolean))).map(t => <option key={String(t)} value={String(t)}>{String(t)}</option>)}
+                        {/* Use enrichedOrders to populate team options so 'inferred' teams show up */}
+                        {Array.from(new Set(enrichedOrders.map(o => o.Team).filter(Boolean))).map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                 </div>
                 <div>
@@ -422,6 +413,7 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
         <div className="w-full h-full min-h-[calc(100vh-6rem)] max-w-7xl mx-auto p-2 sm:p-4 lg:p-6 animate-fade-in">
              <style>{`.animate-fade-in { animation: fadeIn 0.5s ease-in-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
              
+            {/* --- MODALS & PANELS (Responsive) --- */}
             <div className="md:hidden">
                 <FilterPanel isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)}>
                     <FiltersComponent />
@@ -442,6 +434,15 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
                 </Modal>
             </div>
 
+            {/* PDF Export Modal */}
+            {isPdfModalOpen && (
+                <PdfExportModal 
+                    isOpen={isPdfModalOpen} 
+                    onClose={() => setIsPdfModalOpen(false)} 
+                    orders={filteredOrders} 
+                />
+            )}
+
              <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl md:text-3xl font-bold text-white">
                     {editingOrder ? `កែសម្រួល ID: ${editingOrder['Order ID']}` : 'គ្រប់គ្រងប្រតិបត្តិការណ៍'}
@@ -458,10 +459,16 @@ const OrdersDashboard: React.FC<OrdersDashboardProps> = ({ onBack }) => {
             {!editingOrder && (
                  <div className="page-card !p-3 mb-6">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                        <div className="w-full md:w-auto flex-shrink-0">
-                            <button onClick={() => setIsFilterModalOpen(true)} className="btn btn-secondary w-full md:w-auto flex items-center justify-center">
+                        <div className="w-full md:w-auto flex-shrink-0 flex gap-2">
+                            <button onClick={() => setIsFilterModalOpen(true)} className="btn btn-secondary flex-1 md:w-auto flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
-                                Filters & Options
+                                Filters
+                            </button>
+                            <button onClick={() => setIsPdfModalOpen(true)} className="btn !bg-red-600/80 hover:!bg-red-700 text-white flex-1 md:w-auto flex items-center justify-center" title="Export as PDF">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                </svg>
+                                Export PDF
                             </button>
                         </div>
                         <div className="relative w-full md:flex-1 md:max-w-md">
