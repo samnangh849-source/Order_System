@@ -1028,7 +1028,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
 
                              <div className="md:col-span-2">
                                 <label htmlFor="additionalLocation" className="block text-sm font-medium text-gray-400 mb-2">
-                                    ទីតាំងលម្អិត (ផ្ទះលេខ, ផ្លូវ) ឬ Link Google Map
+                                    ទីតាំងលម្អិត (ផ្ទះលេខ, ផ្លូវ) 
                                 </label>
                                 <div className="flex items-center space-x-2">
                                     <input
@@ -1036,7 +1036,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                         id="additionalLocation"
                                         name="additionalLocation"
                                         value={order.customer.additionalLocation}
-                                        placeholder="បិទភ្ជាប់ Link Map ឬបញ្ចូលទីតាំងលម្អិតនៅទីនេះ"
+                                        placeholder="បញ្ចូលទីតាំងលម្អិតនៅទីនេះ"
                                         className="form-input w-full"
                                         onChange={handleCustomerChange}
                                     />
