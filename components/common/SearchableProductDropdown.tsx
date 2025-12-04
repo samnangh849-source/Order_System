@@ -1,3 +1,11 @@
+import React, { useState, useRef, useEffect, useMemo, useContext, useCallback } from 'react';
+import { MasterProduct } from '../../types';
+import { convertGoogleDriveUrl } from '../../utils/fileUtils';
+import { AppContext } from '../../App';
+import { WEB_APP_URL } from '../../constants';
+import Spinner from './Spinner';
+import Modal from './Modal';
+
 // Helper to highlight search terms in results
 const highlightMatch = (text: string, query: string) => {
     if (!query || !text) return <span>{text}</span>;
@@ -17,9 +25,9 @@ const highlightMatch = (text: string, query: string) => {
 
 // A more robust, word-based relevance scoring algorithm
 const getRelevanceScore = (product: MasterProduct, query: string): number => {
-    const pName = String(product.ProductName || '').toLowerCase();
-    const pBarcode = String(product.Barcode || '').toLowerCase();
-    const pTags = String(product.Tags || '').toLowerCase();
+    const pName = (product.ProductName || '').toLowerCase();
+    const pBarcode = (product.Barcode || '').toLowerCase();
+    const pTags = (product.Tags || '').toLowerCase();
     const searchableText = `${pName} ${pBarcode} ${pTags}`;
     
     const q = query.toLowerCase().trim();
@@ -61,13 +69,6 @@ const getRelevanceScore = (product: MasterProduct, query: string): number => {
     return score;
 };
 
-// ... (rest of the file remains unchanged)
-import React, { useState, useRef, useEffect, useMemo, useContext, useCallback } from 'react';
-import { MasterProduct } from '../../types';
-import { convertGoogleDriveUrl } from '../../utils/fileUtils';
-import { AppContext } from '../../App';
-import { WEB_APP_URL } from '../../constants';
-import Spinner from './Spinner';
 
 // --- START: ProductTagEditor Component ---
 const ProductTagEditor: React.FC<{
@@ -82,7 +83,7 @@ const ProductTagEditor: React.FC<{
 
     useEffect(() => {
         if (selectedProduct && selectedProduct.Tags) {
-            setTags(String(selectedProduct.Tags).split(',').map(t => t.trim()).filter(Boolean));
+            setTags(selectedProduct.Tags.split(',').map(t => t.trim()).filter(Boolean));
         } else {
             setTags([]);
         }
@@ -121,7 +122,7 @@ const ProductTagEditor: React.FC<{
             setError((err as Error).message);
             // Revert UI state on failure
             if (selectedProduct && selectedProduct.Tags) {
-                setTags(String(selectedProduct.Tags).split(',').map(t => t.trim()).filter(Boolean));
+                setTags(selectedProduct.Tags.split(',').map(t => t.trim()).filter(Boolean));
             } else {
                 setTags([]);
             }
@@ -197,6 +198,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
+    const [previewProduct, setPreviewProduct] = useState<MasterProduct | null>(null);
     
     const dropdownRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -228,24 +230,14 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         return products
             .map(product => ({ product, score: getRelevanceScore(product, query) }))
             .filter(p => p.score > 0)
-            .sort((a, b) => {
-                // Primary sort: Score
-                const scoreDiff = b.score - a.score;
-                if (scoreDiff !== 0) return scoreDiff;
-                
-                // Secondary sort: Alphabetical (Safeguard against numbers)
-                const nameA = String(a.product.ProductName || '');
-                const nameB = String(b.product.ProductName || '');
-                return nameA.localeCompare(nameB);
-            })
+            .sort((a, b) => b.score - a.score || a.product.ProductName.localeCompare(b.product.ProductName))
             .map(p => p.product);
     }, [products, searchTerm]);
     
     const canAddNewProduct = useMemo(() => {
         const trimmedSearch = searchTerm.trim();
         if (!trimmedSearch) return false;
-        // SAFEGUARD: Ensure comparison happens against strings
-        return !products.some(p => String(p.ProductName || '').trim().toLowerCase() === trimmedSearch.toLowerCase());
+        return !products.some(p => p.ProductName.trim().toLowerCase() === trimmedSearch.toLowerCase());
     }, [searchTerm, products]);
 
     const itemsForNavigation = useMemo(() => {
@@ -263,14 +255,27 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
         }
     }, [activeIndex, itemsForNavigation]);
 
-    const handleSelect = useCallback((productName: string) => {
+    // This function finalizes the selection
+    const confirmSelect = useCallback((productName: string) => {
         onSelect(productName);
         setSearchTerm(productName);
         setIsOpen(false);
+        setPreviewProduct(null); // Close modal if open
         setActiveIndex(0);
         inputRef.current?.blur();
     }, [onSelect]);
     
+    // This function handles the click/touch interaction
+    const handleItemClick = (item: any) => {
+        if (item.isAddNew) {
+            // "Add New" doesn't need a preview modal
+            confirmSelect(item.ProductName);
+        } else {
+            // Show preview modal for existing products
+            setPreviewProduct(item);
+        }
+    };
+
     const handleClear = useCallback(() => {
         onSelect('');
         setSearchTerm('');
@@ -297,8 +302,9 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
             case 'Enter':
                 if (!isOpen) return;
                 e.preventDefault();
+                // Keyboard "Enter" selects directly without preview for speed
                 if (activeIndex > -1 && itemsForNavigation[activeIndex]) {
-                    handleSelect(itemsForNavigation[activeIndex].ProductName);
+                    confirmSelect(itemsForNavigation[activeIndex].ProductName);
                 }
                 break;
             case 'Escape':
@@ -377,7 +383,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                                         role="option"
                                         aria-selected={activeIndex === index}
                                         className={`p-3 text-sm rounded-md cursor-pointer flex items-center gap-3 ${activeIndex === index ? 'bg-blue-600' : 'hover:bg-blue-600/70'}`}
-                                        onMouseDown={() => handleSelect(item.ProductName)}
+                                        onMouseDown={() => handleItemClick(item)}
                                     >
                                         <div className="w-10 h-10 rounded flex-shrink-0 bg-gray-700 flex items-center justify-center">
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" /></svg>
@@ -395,19 +401,19 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                                     id={`product-option-${index}`}
                                     role="option"
                                     aria-selected={activeIndex === index}
-                                    title={product.ProductName}
+                                    title="Click to view details"
                                     className={`p-3 text-sm rounded-md cursor-pointer flex items-center gap-3 ${activeIndex === index ? 'bg-blue-600' : 'hover:bg-blue-600/70'}`}
-                                    onMouseDown={() => handleSelect(product.ProductName)}
+                                    onMouseDown={() => handleItemClick(product)}
                                 >
                                     <img src={convertGoogleDriveUrl(product.ImageURL)} alt={product.ProductName} className="w-10 h-10 object-cover rounded flex-shrink-0" />
                                     <div className="flex-grow overflow-hidden">
                                         <p className="font-semibold truncate">{highlightMatch(product.ProductName, searchTerm)}</p>
                                         <p className="text-xs text-gray-400 truncate">
-                                            Barcode: {product.Barcode ? highlightMatch(String(product.Barcode), searchTerm) : 'N/A'} | Price: ${product.Price.toFixed(2)}
+                                            Barcode: {product.Barcode ? highlightMatch(product.Barcode, searchTerm) : 'N/A'} | Price: ${product.Price.toFixed(2)}
                                         </p>
                                         {product.Tags && (
                                             <p className="text-xs text-blue-300 truncate mt-1">
-                                                Tags: {highlightMatch(String(product.Tags), searchTerm)}
+                                                Tags: {highlightMatch(product.Tags, searchTerm)}
                                             </p>
                                         )}
                                     </div>
@@ -416,6 +422,53 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                         })}
                     </ul>
                 </div>
+            )}
+
+            {previewProduct && (
+                <Modal isOpen={true} onClose={() => setPreviewProduct(null)} maxWidth="max-w-sm">
+                    <div className="p-2 sm:p-4 text-center">
+                        <h3 className="text-lg font-bold text-white mb-4">បញ្ជាក់ការជ្រើសរើស</h3>
+                        
+                        <div className="flex justify-center mb-4">
+                            <img 
+                                src={convertGoogleDriveUrl(previewProduct.ImageURL)} 
+                                alt={previewProduct.ProductName}
+                                className="w-32 h-32 object-cover rounded-lg border-2 border-gray-600 shadow-lg bg-gray-700"
+                            />
+                        </div>
+
+                        <div className="bg-gray-800 p-4 rounded-lg mb-6 border border-gray-700 shadow-inner">
+                            <p className="text-blue-300 text-lg md:text-xl font-bold break-words leading-relaxed">
+                                {previewProduct.ProductName}
+                            </p>
+                            <div className="flex justify-center gap-4 mt-3 text-sm text-gray-400">
+                                <span className="px-2 py-1 bg-gray-700 rounded">
+                                    💰 ${previewProduct.Price.toFixed(2)}
+                                </span>
+                                {previewProduct.Barcode && (
+                                    <span className="px-2 py-1 bg-gray-700 rounded">
+                                        📟 {previewProduct.Barcode}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button 
+                                onClick={() => setPreviewProduct(null)} 
+                                className="btn btn-secondary flex-1 py-3"
+                            >
+                                បោះបង់
+                            </button>
+                            <button 
+                                onClick={() => confirmSelect(previewProduct.ProductName)} 
+                                className="btn btn-primary flex-1 py-3 font-bold text-lg"
+                            >
+                                ជ្រើសរើស
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
             )}
         </div>
     );

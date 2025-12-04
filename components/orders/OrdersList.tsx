@@ -1,8 +1,8 @@
-
 import React, { useState, useMemo, useContext, useEffect } from 'react';
 import { ParsedOrder } from '../../types';
 import { AppContext } from '../../App';
 import { LABEL_PRINTER_URL_BASE } from '../../constants';
+import { convertGoogleDriveUrl } from '../../utils/fileUtils';
 
 interface OrdersListProps {
     orders: ParsedOrder[];
@@ -60,7 +60,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
     const hasPrintFeature = !!labelPrinterUrl;
 
     const [visibleColumns, setVisibleColumns] = useState(new Set([
-        'Order ID', 'customer', 'locationAddress', 'User', 'Grand Total', 'Payment Status', 'Timestamp', 'actions'
+        'Order ID', 'Page', 'customer', 'locationAddress', 'User', 'Grand Total', 'Payment Status', 'Timestamp', 'actions'
     ]));
 
     const toggleColumn = (key: string) => {
@@ -78,6 +78,23 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
     const allColumns = useMemo(() => {
         const columns = [
             { key: 'Order ID', label: 'Order ID' },
+            { key: 'Page', label: 'Page', render: (row: ParsedOrder) => {
+                const pageInfo = appData.pages?.find((p: any) => p.PageName === row.Page);
+                const logoUrl = pageInfo ? convertGoogleDriveUrl(pageInfo.PageLogoURL) : '';
+                return (
+                    <div className="flex items-center space-x-2">
+                        {logoUrl && (
+                            <img 
+                                src={logoUrl} 
+                                alt={row.Page} 
+                                className="w-8 h-8 rounded-full object-cover border border-gray-600 bg-gray-700"
+                                title={row.Page}
+                            />
+                        )}
+                        <span className="text-sm font-medium">{row.Page}</span>
+                    </div>
+                );
+            }},
             { key: 'customer', label: 'អតិថិជន', render: (row: ParsedOrder) => (
                 <div>
                     <div>{row['Customer Name']}</div>
@@ -141,7 +158,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
         }
 
         return columns;
-    }, [showActions, hasPrintFeature, onEdit]);
+    }, [showActions, hasPrintFeature, onEdit, appData.pages]);
 
     const activeColumns = useMemo(() => allColumns.filter(c => visibleColumns.has(c.key)), [allColumns, visibleColumns]);
 
