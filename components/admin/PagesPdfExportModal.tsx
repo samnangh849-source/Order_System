@@ -165,32 +165,44 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
             const teamGap = 10 * scale; 
             const itemGap = 5 * scale;
             
-            // Calculate Content Width to be Centered
-            // Base margin is the minimum margin. Real margin will be calculated to center content.
             const minMargin = 10 * scale; 
             const maxContentWidth = width - (minMargin * 2);
             
-            // Calculate column width (Team Width) based on desired TeamsPerRow
-            // We use Math.floor to ensure clean pixels/units
             const teamColWidth = Math.floor((maxContentWidth - ((teamsPerRow - 1) * teamGap)) / teamsPerRow);
-            
-            // Calculate the ACTUAL total width used by content
             const actualTotalContentWidth = (teamColWidth * teamsPerRow) + (teamGap * (teamsPerRow - 1));
             
-            // Calculate Start X to Center the content block
             const startX = (width - actualTotalContentWidth) / 2;
 
-            // Inner Item Width (Page Card Width)
             const innerItemWidth = (teamColWidth - ((itemsPerTeamRow - 1) * itemGap)) / itemsPerTeamRow;
 
             // Height Constants
-            // Increased heights to accommodate full text wrapping
             const gridRowHeight = 85 * scale; 
             const listRowHeight = 30 * scale; 
             const autoTableRowHeight = 16 * scale;
             const teamHeaderHeight = 22 * scale;
 
-            // Helper to calculate the height of a specific team block
+            // Helper to calculate text height for wrapping (needed for pre-calculation)
+            // We need a dummy doc for text width calculation if we want perfect pre-calc,
+            // but for simplicity we'll use a heuristic here or create a temporary doc.
+            const tempDoc = new jsPDF(); 
+            const getEstimatedTextHeight = (text: string, maxWidth: number, fontSize: number) => {
+                // Approximate scaling
+                const pointsToMm = 0.3527777778; 
+                // We are in 'scale' units. Convert maxWidth to points approx for calculation
+                // This is a rough estimation.
+                return (Math.ceil(text.length * fontSize * 0.6 / maxWidth) * fontSize * 1.2);
+            };
+
+            // Helper to calculate Grid Row Height
+            const calculateGridRowHeight = (rowItems: TeamPage[], isGrid: boolean) => {
+                if (rowItems.length === 0) return 0;
+                // For now, use fixed height + padding to be safe and simple, 
+                // or use the pre-defined constants which are generous.
+                const minHeight = isGrid ? gridRowHeight : listRowHeight;
+                return minHeight; 
+            };
+
+            // Helper to calculate Team Block Height
             const calculateTeamBlockHeight = (items: TeamPage[]) => {
                 let h = teamHeaderHeight + (10 * scale); // Header + padding
                 
@@ -207,7 +219,8 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
 
             const sortedTeamNames = Object.keys(groupedForPdf).sort();
 
-            // 5. Single Sheet Height Calculation
+            // 5. Single Sheet Height Calculation (PRE-CALCULATION)
+            let finalDocHeight = height;
             if (singleSheet) {
                 let totalContentHeight = headerHeight + minMargin;
                 
@@ -222,24 +235,25 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                 }
                 
                 totalContentHeight += minMargin;
-                height = Math.max(height, totalContentHeight);
+                finalDocHeight = Math.max(height, totalContentHeight);
             }
 
-            // 6. Initialize PDF
+            // 6. Initialize FINAL PDF Instance
             const doc = new jsPDF({
                 orientation: orientation,
                 unit: unit,
-                format: [width, height]
+                format: [width, finalDocHeight]
             }) as jsPDFWithAutoTable;
 
-            // 7. Text Fitting Helper (The Core of "Full Name" feature)
-            const drawFitText = (
+            // 7. Define Drawing Helpers using the `doc` instance
+            
+            // Single Line Fit Helper
+            const drawSingleLineFit = (
                 text: string, 
-                x: number, 
+                centerX: number, 
                 y: number, 
                 maxWidth: number, 
-                maxHeight: number, 
-                maxFontSize: number, 
+                initialFontSize: number, 
                 fontStyle: string = 'bold',
                 align: 'center' | 'left' = 'center',
                 color: number[] = [0,0,0]
@@ -247,40 +261,32 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                 doc.setFont("helvetica", fontStyle);
                 doc.setTextColor(color[0], color[1], color[2]);
 
-                let fontSize = maxFontSize;
-                let lines: string[] = [];
-                let blockHeight = 0;
+                let fontSize = initialFontSize;
+                doc.setFontSize(fontSize);
                 
-                // Binary-ish search or Iterative reduction to find best fit
-                // We want largest font that fits width AND height
-                while (fontSize > 4) { // Minimum 4pt
+                // Reduce font size until text fits width or hits minimum size
+                const minFontSize = 5 * scale;
+                while (doc.getTextWidth(text) > maxWidth && fontSize > minFontSize) {
+                    fontSize -= 0.5 * scale;
                     doc.setFontSize(fontSize);
-                    lines = doc.splitTextToSize(text, maxWidth);
-                    // Estimate height: lines * lineHeight (approx 1.15em)
-                    blockHeight = lines.length * (fontSize * 1.15);
-                    
-                    if (blockHeight <= maxHeight) {
-                        break; // Fits!
-                    }
-                    fontSize -= 0.5 * scale; // Reduce and try again
                 }
 
-                // Vertical Alignment: Calculate starting Y to center block
-                const startY = y + (maxHeight - blockHeight) / 2 + (fontSize * 0.4); // +adjustment for baseline
-
-                // Draw lines
-                lines.forEach((line, index) => {
-                    const lineY = startY + (index * (fontSize * 1.15));
-                    if (align === 'center') {
-                        const txtW = doc.getTextWidth(line);
-                        doc.text(line, x + (maxWidth - txtW) / 2, lineY);
-                    } else {
-                        doc.text(line, x, lineY);
+                let textToDraw = text;
+                if (doc.getTextWidth(textToDraw) > maxWidth) {
+                    const ellipsis = "...";
+                    while (doc.getTextWidth(textToDraw + ellipsis) > maxWidth && textToDraw.length > 0) {
+                        textToDraw = textToDraw.slice(0, -1);
                     }
-                });
+                    textToDraw += ellipsis;
+                }
+
+                if (align === 'center') {
+                    doc.text(textToDraw, centerX, y, { align: 'center' });
+                } else {
+                    doc.text(textToDraw, centerX, y);
+                }
             };
 
-            // 8. Header Drawing
             const drawHeader = () => {
                 doc.setFontSize(18 * scale);
                 doc.setTextColor(40, 40, 40);
@@ -289,15 +295,15 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                 doc.setTextColor(100, 100, 100);
                 doc.text(`Generated: ${new Date().toLocaleString()}`, width / 2, 24 * scale, { align: 'center' });
             };
-            drawHeader();
 
-            // 9. Main Rendering Loop
+            // 8. Main Rendering Loop
+            drawHeader();
             let currentY = headerHeight + 5 * scale;
             
             for (let i = 0; i < sortedTeamNames.length; i += teamsPerRow) {
                 const rowTeams = sortedTeamNames.slice(i, i + teamsPerRow);
                 
-                // Calculate max height for this row (layout pass)
+                // Calculate max height for this row
                 let maxRowHeight = 0;
                 rowTeams.forEach(team => {
                     const h = calculateTeamBlockHeight(groupedForPdf[team]);
@@ -305,7 +311,7 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                 });
 
                 // Check Page Break
-                if (!singleSheet && currentY + maxRowHeight > height - minMargin) {
+                if (!singleSheet && currentY + maxRowHeight > finalDocHeight - minMargin) {
                     doc.addPage();
                     drawHeader();
                     currentY = headerHeight + 5 * scale;
@@ -313,7 +319,6 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
 
                 // Render Teams
                 rowTeams.forEach((team, idx) => {
-                    // X position depends on startX (centering) + index offset
                     const teamX = startX + (idx * (teamColWidth + teamGap));
                     let localY = currentY;
                     const teamPages = groupedForPdf[team];
@@ -343,15 +348,20 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                     // CASE A: Standard Table (1 col list)
                     if (layout === 'list' && itemsPerTeamRow === 1) {
                         const headRow = [];
-                        if (columns.logoImage) headRow.push('Logo');
-                        if (columns.pageName) headRow.push('Name');
-                        if (columns.telegramValue) headRow.push('Telegram');
+                        let colIndexCounter = 0;
+                        let pageNameColIndex = -1;
+
+                        if (columns.logoImage) { headRow.push('Logo'); colIndexCounter++; }
+                        if (columns.pageName) { headRow.push('Name'); pageNameColIndex = colIndexCounter; colIndexCounter++; }
+                        if (columns.telegramValue) { headRow.push('Telegram'); colIndexCounter++; }
+                        if (columns.logoUrl) { headRow.push('Logo Link'); colIndexCounter++; }
                         
                         const body = teamPages.map(page => {
                             const row = [];
                             if (columns.logoImage) row.push(''); 
                             if (columns.pageName) row.push(page.PageName || '');
                             if (columns.telegramValue) row.push(page.TelegramValue || '');
+                            if (columns.logoUrl) row.push(page.PageLogoURL || '');
                             return row;
                         });
 
@@ -365,11 +375,16 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                                 cellPadding: 2 * scale, 
                                 valign: 'middle',
                                 minCellHeight: 14 * scale,
-                                overflow: 'linebreak'
+                                overflow: 'visible' 
                             },
                             headStyles: { fillColor: [55, 65, 81], fontSize: 9 * scale },
                             columnStyles: {
                                 0: columns.logoImage ? { cellWidth: 15 * scale } : {},
+                            },
+                            willDrawCell: (data: any) => {
+                                if (data.section === 'body' && data.column.index === pageNameColIndex) {
+                                    data.cell.text = []; 
+                                }
                             },
                             didDrawCell: (data: any) => {
                                 if (columns.logoImage && data.section === 'body' && data.column.index === 0) {
@@ -384,8 +399,27 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                                         } catch (e) {}
                                     }
                                 }
+                                
+                                if (columns.pageName && data.section === 'body' && data.column.index === pageNameColIndex) {
+                                    const rawText = data.cell.raw;
+                                    const cellX = data.cell.x;
+                                    const cellY = data.cell.y;
+                                    const cellW = data.cell.width;
+                                    const cellH = data.cell.height;
+                                    const textY = cellY + (cellH / 2) + (3 * scale); 
+
+                                    drawSingleLineFit(
+                                        String(rawText),
+                                        cellX + (2 * scale),
+                                        textY,
+                                        cellW - (4 * scale),
+                                        9 * scale,
+                                        'bold',
+                                        'left',
+                                        [0,0,0]
+                                    );
+                                }
                             },
-                            // Use explicit margins/width to ensure table stays within team column
                             margin: { left: teamX },
                             tableWidth: teamColWidth
                         });
@@ -393,9 +427,6 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                     // CASE B: Custom Card Rendering (Grid or Multi-col List)
                     else {
                         const isGrid = layout === 'grid';
-                        const itemHeight = isGrid ? gridRowHeight : listRowHeight;
-                        const imgSize = isGrid ? (25 * scale) : (16 * scale);
-
                         for (let j = 0; j < teamPages.length; j++) {
                             const page = teamPages[j];
                             const itemColIndex = j % itemsPerTeamRow;
@@ -403,13 +434,13 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                             
                             const itemX = teamX + (itemColIndex * (innerItemWidth + itemGap));
                             const itemY = localY + (itemRowIndex * (itemHeight + itemGap));
+                            const itemHeight = isGrid ? gridRowHeight : listRowHeight;
+                            const imgSize = isGrid ? (25 * scale) : (16 * scale);
 
-                            // Card Background
                             doc.setDrawColor(220, 220, 220);
                             doc.setFillColor(255, 255, 255);
                             doc.roundedRect(itemX, itemY, innerItemWidth, itemHeight, 1.5 * scale, 1.5 * scale, 'FD');
 
-                            // 1. Draw Image
                             let hasImageDrawn = false;
                             if (columns.logoImage) {
                                 if (imageMap[page.PageName]) {
@@ -426,26 +457,20 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                                 }
                             }
 
-                            // 2. Draw Text (Using Smart Fit)
                             if (isGrid) {
-                                // GRID LAYOUT
-                                const textAreaY = itemY + (hasImageDrawn ? (imgSize + 8 * scale) : (5 * scale));
-                                const textAvailableHeight = (itemY + itemHeight) - textAreaY - (2 * scale);
-                                const textAreaWidth = innerItemWidth - (4 * scale);
-                                const textCenterX = itemX + (2 * scale);
+                                let currentTextY = itemY + (hasImageDrawn ? (imgSize + 8 * scale) : (5 * scale));
+                                const maxWidth = innerItemWidth - (4 * scale); 
+                                const textCenterX = itemX + (innerItemWidth / 2);
 
-                                // Split height between Name and Telegram
-                                const nameHeightRatio = columns.telegramValue ? 0.65 : 1.0;
-                                const maxNameHeight = textAvailableHeight * nameHeightRatio;
+                                const nameY = columns.telegramValue ? currentTextY : (itemY + (itemHeight/2) + (2*scale));
                                 
                                 if (columns.pageName) {
-                                    drawFitText(
+                                    drawSingleLineFit(
                                         page.PageName || 'Unknown',
                                         textCenterX,
-                                        textAreaY,
-                                        textAreaWidth,
-                                        maxNameHeight,
-                                        9 * scale,
+                                        nameY + (4*scale),
+                                        maxWidth,
+                                        10 * scale,
                                         'bold',
                                         'center',
                                         [0, 0, 0]
@@ -453,14 +478,12 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                                 }
 
                                 if (columns.telegramValue) {
-                                    const telY = textAreaY + maxNameHeight;
-                                    const maxTelHeight = textAvailableHeight - maxNameHeight;
-                                    drawFitText(
+                                    const telY = nameY + (10 * scale);
+                                    drawSingleLineFit(
                                         page.TelegramValue || '-',
                                         textCenterX,
-                                        telY,
-                                        textAreaWidth,
-                                        maxTelHeight,
+                                        telY + (4*scale),
+                                        maxWidth,
                                         8 * scale,
                                         'normal',
                                         'center',
@@ -469,24 +492,19 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                                 }
 
                             } else {
-                                // MULTI-COL LIST LAYOUT
                                 const contentStartX = itemX + (columns.logoImage ? (imgSize + 6*scale) : 5*scale);
                                 const contentWidth = innerItemWidth - (contentStartX - itemX) - (2 * scale);
-                                const contentHeight = itemHeight - (4 * scale);
                                 const contentY = itemY + (2 * scale);
+                                const contentHeight = itemHeight - (4 * scale);
+                                let textCenterY = contentY + (contentHeight/2);
 
                                 if (columns.pageName) {
-                                    // Use about 60% width for Name if Telegram exists and we want side-by-side, 
-                                    // OR full width stack. Let's stack them vertically for full name support.
-                                    
-                                    const nameHeightRatio = columns.telegramValue ? 0.6 : 1.0;
-                                    
-                                    drawFitText(
+                                    const nameY = columns.telegramValue ? (textCenterY - (3*scale)) : textCenterY + (2*scale);
+                                    drawSingleLineFit(
                                         page.PageName || 'Unknown',
                                         contentStartX,
-                                        contentY,
+                                        nameY,
                                         contentWidth,
-                                        contentHeight * nameHeightRatio,
                                         9 * scale,
                                         'bold',
                                         'left',
@@ -495,13 +513,12 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                                 }
                                 
                                 if (columns.telegramValue) {
-                                    const telY = contentY + (contentHeight * 0.6); // Start lower
-                                    drawFitText(
+                                    const telY = columns.pageName ? (textCenterY + (6*scale)) : textCenterY + (2*scale);
+                                    drawSingleLineFit(
                                         page.TelegramValue || '',
                                         contentStartX,
                                         telY,
                                         contentWidth,
-                                        contentHeight * 0.4,
                                         8 * scale,
                                         'normal',
                                         'left',
@@ -513,17 +530,15 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                     }
                 });
 
-                // Next Row
                 currentY += maxRowHeight + teamGap;
             }
 
-            // Footer
             const pageCount = doc.getNumberOfPages();
             for(let i = 1; i <= pageCount; i++) {
                 doc.setPage(i);
                 doc.setFontSize(8 * scale);
                 doc.setTextColor(150, 150, 150);
-                doc.text(`Page ${i} of ${pageCount}`, width - minMargin, height - (5 * scale), { align: 'right' });
+                doc.text(`Page ${i} of ${pageCount}`, width - minMargin, finalDocHeight - (5 * scale), { align: 'right' });
             }
 
             doc.save(`Pages_Report_${layout}_${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -543,7 +558,7 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-white flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l6-6a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                     Export Pages to PDF (High Quality)
                 </h2>
