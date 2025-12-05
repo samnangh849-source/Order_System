@@ -76,3 +76,27 @@ export const convertGoogleDriveUrl = (url?: string, type: 'image' | 'audio' = 'i
     console.warn(`Could not process URL into a usable format, returning fallback. Original URL: "${url}"`);
     return type === 'image' ? fallbackImage : ''; // For audio, return an empty string.
 };
+
+/**
+ * Fetches an image from a URL and converts it to a Base64 string.
+ * Useful for embedding images in PDFs.
+ * @param url The URL of the image.
+ * @returns A promise that resolves to the Base64 string (without prefix) or empty string if failed.
+ */
+export const imageUrlToBase64 = async (url: string): Promise<string> => {
+    try {
+        const processedUrl = convertGoogleDriveUrl(url);
+        if (!processedUrl || processedUrl.includes('placehold.co')) return '';
+
+        // Note: This relies on the server supporting CORS.
+        // Google Drive lh3 links usually support CORS.
+        const response = await fetch(processedUrl, { mode: 'cors' });
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        const blob = await response.blob();
+        return await fileToBase64(blob);
+    } catch (error) {
+        console.warn("Error converting image to base64 for PDF:", error);
+        return '';
+    }
+};
