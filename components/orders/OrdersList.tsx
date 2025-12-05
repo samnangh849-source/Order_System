@@ -82,12 +82,12 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
                 const pageInfo = appData.pages?.find((p: any) => p.PageName === row.Page);
                 const logoUrl = pageInfo ? convertGoogleDriveUrl(pageInfo.PageLogoURL) : '';
                 return (
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-3 min-w-max">
                         {logoUrl && (
                             <img 
                                 src={logoUrl} 
                                 alt={row.Page} 
-                                className="w-8 h-8 rounded-full object-cover border border-gray-600 bg-gray-700"
+                                className="w-8 h-8 rounded-full object-cover border border-gray-600 bg-gray-700 flex-shrink-0"
                                 title={row.Page}
                             />
                         )}
@@ -96,15 +96,15 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
                 );
             }},
             { key: 'customer', label: 'អតិថិជន', render: (row: ParsedOrder) => (
-                <div>
-                    <div>{row['Customer Name']}</div>
+                <div className="min-w-max">
+                    <div className="font-medium">{row['Customer Name']}</div>
                     <div className="text-xs text-gray-400">{row['Customer Phone']}</div>
                 </div>
             )},
             { key: 'locationAddress', label: 'ទីតាំង & អាសយដ្ឋាន', render: (row: ParsedOrder) => (
                 <div className="min-w-[200px]">
                     <p className="font-semibold">{row.Location}</p>
-                    <p className="text-xs text-gray-400">{row['Address Details']}</p>
+                    <p className="text-xs text-gray-400 truncate max-w-xs" title={row['Address Details']}>{row['Address Details']}</p>
                 </div>
             )},
             { key: 'User', label: 'User' },
@@ -114,7 +114,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
             { key: 'Internal Cost', label: 'ថ្លៃដឹក', render: (row: ParsedOrder) => `$${(Number(row['Internal Cost']) || 0).toFixed(2)}` },
             { key: 'Payment Info', label: 'ធនាគារ' },
             
-            { key: 'Grand Total', label: 'សរុប', render: (row: ParsedOrder) => `$${row['Grand Total'].toFixed(2)}` },
+            { key: 'Grand Total', label: 'សរុប', render: (row: ParsedOrder) => <span className="font-bold text-blue-300">`$${row['Grand Total'].toFixed(2)}`</span> },
             { key: 'Payment Status', label: 'ស្ថានភាព', render: (row: ParsedOrder) => (
                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${row['Payment Status'] === 'Paid' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
                     {row['Payment Status']}
@@ -191,14 +191,14 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
                 <table className="admin-table">
                     <thead>
                         <tr>
-                            {activeColumns.map(col => <th key={col.key}>{col.label}</th>)}
+                            {activeColumns.map(col => <th key={col.key} className="whitespace-nowrap">{col.label}</th>)}
                         </tr>
                     </thead>
                     <tbody>
                         {orders.length > 0 ? orders.map(order => (
                             <tr key={order['Order ID']} className="hover:bg-gray-700/50 cursor-pointer" onClick={() => onEdit && showActions && onEdit(order)}>
                                 {activeColumns.map(col => (
-                                    <td key={col.key} className="whitespace-nowrap">
+                                    <td key={col.key} className="whitespace-nowrap px-4 py-3">
                                         {/* FIX: Handle non-renderable array types to satisfy TypeScript */}
                                         {col.render
                                             ? col.render(order)
