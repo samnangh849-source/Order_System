@@ -4,6 +4,7 @@ import Spinner from '../components/common/Spinner';
 import Modal from '../components/common/Modal';
 import { WEB_APP_URL } from '../constants';
 import { fileToBase64, convertGoogleDriveUrl } from '../utils/fileUtils';
+import PagesPdfExportModal from '../components/admin/PagesPdfExportModal';
 
 interface SettingsDashboardProps {
     onBack: () => void;
@@ -432,6 +433,7 @@ const SettingsContent = ({ initialSection }: { initialSection?: string }) => {
     const [mobileSelectedSectionId, setMobileSelectedSectionId] = useState<string | null>(initialSection || null);
     const [modalState, setModalState] = useState<{ isOpen: boolean, sectionId: string, item: any | null }>({ isOpen: false, sectionId: '', item: null });
     const [extraUsers, setExtraUsers] = useState<any[]>([]); // To store users fetched locally if appData is missing them
+    const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
     const isMobile = window.innerWidth < 768;
     const activeSectionId = isMobile ? mobileSelectedSectionId : desktopSelectedSectionId;
@@ -531,6 +533,15 @@ const SettingsContent = ({ initialSection }: { initialSection?: string }) => {
         }
     }
     
+    const handleOpenPdfModal = () => {
+        const pages = getArrayCaseInsensitive(appData, 'pages');
+        if (!pages || pages.length === 0) {
+            alert("No pages data to export.");
+            return;
+        }
+        setIsPdfModalOpen(true);
+    };
+
     const getDisplayValue = (item: any, field: ConfigField) => {
         if (!item || typeof item !== 'object') return '';
         const value = getValueCaseInsensitive(item, field.name);
@@ -571,11 +582,20 @@ const SettingsContent = ({ initialSection }: { initialSection?: string }) => {
     if (isMobile && mobileSelectedSectionId && activeSection) {
         return (
             <div className="w-full md:hidden animate-fade-in">
-                <div className="settings-detail-header">
-                    <button onClick={() => setMobileSelectedSectionId(null)} className="btn btn-secondary !p-2 mr-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                    </button>
-                    <h2 className="text-xl font-bold">{activeSection.icon} {activeSection.title}</h2>
+                <div className="settings-detail-header flex justify-between items-center">
+                    <div className="flex items-center">
+                        <button onClick={() => setMobileSelectedSectionId(null)} className="btn btn-secondary !p-2 mr-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                        </button>
+                        <h2 className="text-xl font-bold">{activeSection.icon} {activeSection.title}</h2>
+                    </div>
+                    {activeSection.id === 'pages' && (
+                        <button onClick={handleOpenPdfModal} className="btn btn-secondary !p-2" title="Export PDF">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </button>
+                    )}
                 </div>
                 <div className="space-y-3 pb-20">
                     {dataForSection.length > 0 ? (
@@ -610,6 +630,14 @@ const SettingsContent = ({ initialSection }: { initialSection?: string }) => {
                         onSave={handleSave}
                     />
                 }
+                
+                {isPdfModalOpen && (
+                    <PagesPdfExportModal 
+                        isOpen={isPdfModalOpen} 
+                        onClose={() => setIsPdfModalOpen(false)}
+                        pages={getArrayCaseInsensitive(appData, 'pages')}
+                    />
+                )}
             </div>
         );
     }
@@ -655,7 +683,17 @@ const SettingsContent = ({ initialSection }: { initialSection?: string }) => {
                     <div key={activeSection.id} className="flex flex-col h-full">
                         <div className="flex justify-between items-center mb-4 flex-shrink-0">
                             <h3 className="text-2xl font-bold text-white">{activeSection.title}</h3>
-                            <button onClick={() => openModal(activeSection.id, null)} className="btn btn-primary text-sm">បន្ថែមថ្មី</button>
+                            <div className="flex space-x-2">
+                                {activeSection.id === 'pages' && (
+                                    <button onClick={handleOpenPdfModal} className="btn btn-secondary text-sm flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
+                                        </svg>
+                                        Export PDF
+                                    </button>
+                                )}
+                                <button onClick={() => openModal(activeSection.id, null)} className="btn btn-primary text-sm">បន្ថែមថ្មី</button>
+                            </div>
                         </div>
                         <div className="flex-grow overflow-auto">
                             <table className="admin-table w-full">
@@ -715,6 +753,14 @@ const SettingsContent = ({ initialSection }: { initialSection?: string }) => {
                     onSave={handleSave}
                 />
             }
+
+            {isPdfModalOpen && (
+                <PagesPdfExportModal 
+                    isOpen={isPdfModalOpen} 
+                    onClose={() => setIsPdfModalOpen(false)}
+                    pages={getArrayCaseInsensitive(appData, 'pages')}
+                />
+            )}
         </div>
     ); 
 };
@@ -737,6 +783,7 @@ const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ onBack, initialSe
                     ត្រឡប់ទៅផ្ទាំង Admin
                 </button>
             </div>
+            
             
             <SettingsContent initialSection={initialSection} />
 
