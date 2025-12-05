@@ -114,7 +114,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
             { key: 'Internal Cost', label: 'ថ្លៃដឹក', render: (row: ParsedOrder) => `$${(Number(row['Internal Cost']) || 0).toFixed(2)}` },
             { key: 'Payment Info', label: 'ធនាគារ' },
             
-            { key: 'Grand Total', label: 'សរុប', render: (row: ParsedOrder) => <span className="font-bold text-blue-300">`$${row['Grand Total'].toFixed(2)}`</span> },
+            { key: 'Grand Total', label: 'សរុប', render: (row: ParsedOrder) => <span className="font-bold text-blue-300">${row['Grand Total'].toFixed(2)}</span> },
             { key: 'Payment Status', label: 'ស្ថានភាព', render: (row: ParsedOrder) => (
                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${row['Payment Status'] === 'Paid' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
                     {row['Payment Status']}
