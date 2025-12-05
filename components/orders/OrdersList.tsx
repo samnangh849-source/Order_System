@@ -60,7 +60,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
     const hasPrintFeature = !!labelPrinterUrl;
 
     const [visibleColumns, setVisibleColumns] = useState(new Set([
-        'Order ID', 'Page', 'customer', 'locationAddress', 'User', 'Grand Total', 'Payment Status', 'Timestamp', 'actions'
+        'index', 'Order ID', 'Page', 'customer', 'locationAddress', 'User', 'Grand Total', 'Payment Status', 'Timestamp', 'actions'
     ]));
 
     const toggleColumn = (key: string) => {
@@ -77,12 +77,18 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
 
     const allColumns = useMemo(() => {
         const columns = [
+            { 
+                key: 'index', 
+                label: '#', 
+                // @ts-ignore - Render function accepts index as second arg
+                render: (_: ParsedOrder, index: number) => <span className="text-gray-500 font-mono text-xs">{index + 1}</span> 
+            },
             { key: 'Order ID', label: 'Order ID' },
             { key: 'Page', label: 'Page', render: (row: ParsedOrder) => {
                 const pageInfo = appData.pages?.find((p: any) => p.PageName === row.Page);
                 const logoUrl = pageInfo ? convertGoogleDriveUrl(pageInfo.PageLogoURL) : '';
                 return (
-                    <div className="flex items-center gap-3 min-w-max">
+                    <div className="flex items-center gap-3 w-max">
                         {logoUrl && (
                             <img 
                                 src={logoUrl} 
@@ -195,13 +201,14 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
                         </tr>
                     </thead>
                     <tbody>
-                        {orders.length > 0 ? orders.map(order => (
+                        {orders.length > 0 ? orders.map((order, index) => (
                             <tr key={order['Order ID']} className="hover:bg-gray-700/50 cursor-pointer" onClick={() => onEdit && showActions && onEdit(order)}>
                                 {activeColumns.map(col => (
                                     <td key={col.key} className="whitespace-nowrap px-4 py-3">
                                         {/* FIX: Handle non-renderable array types to satisfy TypeScript */}
                                         {col.render
-                                            ? col.render(order)
+                                            // @ts-ignore - Index arg
+                                            ? col.render(order, index)
                                             : (() => {
                                                 const value = order[col.key as keyof ParsedOrder];
                                                 // The `Product[]` type from `ParsedOrder` is not a valid ReactNode.

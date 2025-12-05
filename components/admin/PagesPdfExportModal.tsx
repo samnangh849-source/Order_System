@@ -21,11 +21,13 @@ interface PagesPdfExportModalProps {
 type PageSize = 'a4' | 'a3' | 'letter' | 'legal' | '1080p';
 type Orientation = 'portrait' | 'landscape';
 type LayoutType = 'list' | 'grid';
+type FontWeight = 'bold' | 'normal';
 
 const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClose, pages }) => {
     const [pageSize, setPageSize] = useState<PageSize>('a4');
     const [orientation, setOrientation] = useState<Orientation>('landscape');
     const [layout, setLayout] = useState<LayoutType>('list');
+    const [pageNameFontWeight, setPageNameFontWeight] = useState<FontWeight>('bold');
     
     // Layout Configurations
     const [itemsPerTeamRow, setItemsPerTeamRow] = useState<number>(1); 
@@ -128,7 +130,7 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
             let processedCount = 0;
             const totalCount = finalPages.length;
 
-            for (const page of finalPages) {
+            const imagePromises = finalPages.map(async (page) => {
                 if (page.PageLogoURL && columns.logoImage) {
                     try {
                         const base64 = await imageUrlToBase64(page.PageLogoURL);
@@ -139,7 +141,9 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                 }
                 processedCount++;
                 setProgress(Math.round((processedCount / totalCount) * 100));
-            }
+            });
+            
+            await Promise.all(imagePromises);
 
             // 3. Document Dimensions & Scaling
             let unit: 'mm' | 'px' = 'mm';
@@ -175,34 +179,20 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
 
             const innerItemWidth = (teamColWidth - ((itemsPerTeamRow - 1) * itemGap)) / itemsPerTeamRow;
 
-            // Height Constants
-            const gridRowHeight = 85 * scale; 
+            // Height Constants - dynamic based on content
+            const gridRowHeight = (nameLength: number) => {
+                if (nameLength > 40) return 120 * scale;
+                else if (nameLength > 30) return 110 * scale;
+                else if (nameLength > 20) return 100 * scale;
+                else if (nameLength > 15) return 90 * scale;
+                else return 85 * scale;
+            };
+            
             const listRowHeight = 30 * scale; 
             const autoTableRowHeight = 16 * scale;
             const teamHeaderHeight = 22 * scale;
 
-            // Helper to calculate text height for wrapping (needed for pre-calculation)
-            // We need a dummy doc for text width calculation if we want perfect pre-calc,
-            // but for simplicity we'll use a heuristic here or create a temporary doc.
-            const tempDoc = new jsPDF(); 
-            const getEstimatedTextHeight = (text: string, maxWidth: number, fontSize: number) => {
-                // Approximate scaling
-                const pointsToMm = 0.3527777778; 
-                // We are in 'scale' units. Convert maxWidth to points approx for calculation
-                // This is a rough estimation.
-                return (Math.ceil(text.length * fontSize * 0.6 / maxWidth) * fontSize * 1.2);
-            };
-
-            // Helper to calculate Grid Row Height
-            const calculateGridRowHeight = (rowItems: TeamPage[], isGrid: boolean) => {
-                if (rowItems.length === 0) return 0;
-                // For now, use fixed height + padding to be safe and simple, 
-                // or use the pre-defined constants which are generous.
-                const minHeight = isGrid ? gridRowHeight : listRowHeight;
-                return minHeight; 
-            };
-
-            // Helper to calculate Team Block Height
+            // Helper to calculate the height of a specific team block
             const calculateTeamBlockHeight = (items: TeamPage[]) => {
                 let h = teamHeaderHeight + (10 * scale); // Header + padding
                 
@@ -211,7 +201,13 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                     h += (items.length * autoTableRowHeight); 
                 } else {
                     const rows = Math.ceil(items.length / itemsPerTeamRow);
-                    const rowH = layout === 'grid' ? gridRowHeight : listRowHeight;
+                    
+                    // Calculate max name length in this team
+                    const maxNameLength = items.reduce((max, page) => {
+                        return Math.max(max, page.PageName?.length || 0);
+                    }, 0);
+                    
+                    const rowH = layout === 'grid' ? gridRowHeight(maxNameLength) : listRowHeight;
                     h += (rows * (rowH + itemGap));
                 }
                 return h;
@@ -219,7 +215,7 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
 
             const sortedTeamNames = Object.keys(groupedForPdf).sort();
 
-            // 5. Single Sheet Height Calculation (PRE-CALCULATION)
+            // 5. Single Sheet Height Calculation
             let finalDocHeight = height;
             if (singleSheet) {
                 let totalContentHeight = headerHeight + minMargin;
@@ -245,45 +241,75 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                 format: [width, finalDocHeight]
             }) as jsPDFWithAutoTable;
 
-            // 7. Define Drawing Helpers using the `doc` instance
-            
-            // Single Line Fit Helper
-            const drawSingleLineFit = (
+            // 7. IMPROVED PERFECT FIT TEXT HELPER - ALWAYS SHOW FULL TEXT
+            const drawPerfectFitText = (
                 text: string, 
                 centerX: number, 
                 y: number, 
                 maxWidth: number, 
-                initialFontSize: number, 
+                maxFontSize: number, 
                 fontStyle: string = 'bold',
                 align: 'center' | 'left' = 'center',
-                color: number[] = [0,0,0]
+                color: number[] = [0,0,0],
+                allowWrap: boolean = false // អនុញ្ញាតអោយអត្ថបទចុះបន្ទាត់
             ) => {
                 doc.setFont("helvetica", fontStyle);
                 doc.setTextColor(color[0], color[1], color[2]);
 
-                let fontSize = initialFontSize;
-                doc.setFontSize(fontSize);
+                let displayText = text || '';
+                let finalFontSize = maxFontSize;
                 
-                // Reduce font size until text fits width or hits minimum size
-                const minFontSize = 5 * scale;
-                while (doc.getTextWidth(text) > maxWidth && fontSize > minFontSize) {
-                    fontSize -= 0.5 * scale;
-                    doc.setFontSize(fontSize);
+                // រកទំហំអក្សរដែលល្អបំផុតសម្រាប់អត្ថបទពេញលេញ
+                doc.setFontSize(finalFontSize);
+                let textWidth = doc.getTextWidth(displayText);
+                
+                // បន្ថយទំហំអក្សររហូតដល់អត្ថបទសមនឹងទទឹង
+                while (textWidth > maxWidth && finalFontSize > 4 * scale) {
+                    finalFontSize -= 0.5 * scale;
+                    doc.setFontSize(finalFontSize);
+                    textWidth = doc.getTextWidth(displayText);
                 }
-
-                let textToDraw = text;
-                if (doc.getTextWidth(textToDraw) > maxWidth) {
-                    const ellipsis = "...";
-                    while (doc.getTextWidth(textToDraw + ellipsis) > maxWidth && textToDraw.length > 0) {
-                        textToDraw = textToDraw.slice(0, -1);
+                
+                // ប្រសិនបើទំហំអក្សរតូចពេក អនុញ្ញាតអោយអត្ថបទចុះបន្ទាត់
+                if (finalFontSize <= 5 * scale && allowWrap) {
+                    // បែងចែកអត្ថបទទៅជាពីរបន្ទាត់
+                    const words = displayText.split(' ');
+                    if (words.length > 1) {
+                        const midIndex = Math.floor(words.length / 2);
+                        const line1 = words.slice(0, midIndex).join(' ');
+                        const line2 = words.slice(midIndex).join(' ');
+                        
+                        // សាកល្បងទំហំអក្សរសម្រាប់ពីរបន្ទាត់
+                        let lineFontSize = maxFontSize;
+                        doc.setFontSize(lineFontSize);
+                        const line1Width = doc.getTextWidth(line1);
+                        const line2Width = doc.getTextWidth(line2);
+                        
+                        while ((line1Width > maxWidth || line2Width > maxWidth) && lineFontSize > 4 * scale) {
+                            lineFontSize -= 0.5 * scale;
+                            doc.setFontSize(lineFontSize);
+                        }
+                        
+                        doc.setFontSize(lineFontSize);
+                        
+                        if (align === 'center') {
+                            doc.text(line1, centerX, y - (3 * scale), { align: 'center' });
+                            doc.text(line2, centerX, y + (6 * scale), { align: 'center' });
+                        } else {
+                            doc.text(line1, centerX, y - (3 * scale), { maxWidth });
+                            doc.text(line2, centerX, y + (6 * scale), { maxWidth });
+                        }
+                        return;
                     }
-                    textToDraw += ellipsis;
                 }
-
+                
+                doc.setFontSize(finalFontSize);
+                
                 if (align === 'center') {
-                    doc.text(textToDraw, centerX, y, { align: 'center' });
+                    doc.text(displayText, centerX, y, { align: 'center' });
                 } else {
-                    doc.text(textToDraw, centerX, y);
+                    // For left align, ensure text doesn't overflow
+                    doc.text(displayText, centerX, y, { maxWidth: allowWrap ? maxWidth : undefined });
                 }
             };
 
@@ -303,27 +329,23 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
             for (let i = 0; i < sortedTeamNames.length; i += teamsPerRow) {
                 const rowTeams = sortedTeamNames.slice(i, i + teamsPerRow);
                 
-                // Calculate max height for this row
                 let maxRowHeight = 0;
                 rowTeams.forEach(team => {
                     const h = calculateTeamBlockHeight(groupedForPdf[team]);
                     if (h > maxRowHeight) maxRowHeight = h;
                 });
 
-                // Check Page Break
                 if (!singleSheet && currentY + maxRowHeight > finalDocHeight - minMargin) {
                     doc.addPage();
                     drawHeader();
                     currentY = headerHeight + 5 * scale;
                 }
 
-                // Render Teams
                 rowTeams.forEach((team, idx) => {
                     const teamX = startX + (idx * (teamColWidth + teamGap));
                     let localY = currentY;
                     const teamPages = groupedForPdf[team];
 
-                    // --- VERTICAL DIVIDER ---
                     if (idx < rowTeams.length - 1) {
                         doc.setDrawColor(200, 200, 200);
                         doc.setLineWidth(0.5 * scale);
@@ -331,7 +353,6 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                         doc.line(lineX, currentY, lineX, currentY + maxRowHeight);
                     }
 
-                    // --- TEAM HEADER ---
                     doc.setFillColor(240, 242, 245);
                     doc.setDrawColor(200, 200, 200);
                     doc.roundedRect(teamX, localY, teamColWidth, 12 * scale, 2 * scale, 2 * scale, 'FD');
@@ -369,22 +390,31 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                             startY: localY,
                             head: [headRow],
                             body: body,
-                            theme: 'striped',
+                            theme: 'grid',
                             styles: { 
                                 fontSize: 9 * scale, 
-                                cellPadding: 2 * scale, 
+                                cellPadding: 3 * scale,
                                 valign: 'middle',
-                                minCellHeight: 14 * scale,
-                                overflow: 'visible' 
+                                minCellHeight: 18 * scale, // Increased min height for wrapping
+                                overflow: 'linebreak',
+                                cellWidth: 'wrap'
                             },
-                            headStyles: { fillColor: [55, 65, 81], fontSize: 9 * scale },
+                            headStyles: { 
+                                fillColor: [55, 65, 81], 
+                                fontSize: 9 * scale,
+                                cellPadding: 3 * scale,
+                                textColor: [255, 255, 255],
+                                fontStyle: 'bold'
+                            },
                             columnStyles: {
-                                0: columns.logoImage ? { cellWidth: 15 * scale } : {},
-                            },
-                            willDrawCell: (data: any) => {
-                                if (data.section === 'body' && data.column.index === pageNameColIndex) {
-                                    data.cell.text = []; 
-                                }
+                                0: columns.logoImage ? { cellWidth: 22 * scale } : {}, // Increased logo column width
+                                ...(pageNameColIndex >= 0 ? {
+                                    [pageNameColIndex]: { 
+                                        cellWidth: 'auto',
+                                        minCellWidth: 50 * scale, // Ensure minimum width for names
+                                        fontStyle: pageNameFontWeight // Apply user selected font weight
+                                    }
+                                } : {})
                             },
                             didDrawCell: (data: any) => {
                                 if (columns.logoImage && data.section === 'body' && data.column.index === 0) {
@@ -392,32 +422,12 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                                     const page = teamPages[rowIndex];
                                     if (page && imageMap[page.PageName]) {
                                         try {
-                                            const imgDim = 10 * scale;
+                                            const imgDim = 14 * scale; // Increased image size
                                             const xPos = data.cell.x + (data.cell.width - imgDim) / 2;
                                             const yPos = data.cell.y + (data.cell.height - imgDim) / 2;
                                             doc.addImage(`data:image/jpeg;base64,${imageMap[page.PageName]}`, 'JPEG', xPos, yPos, imgDim, imgDim);
                                         } catch (e) {}
                                     }
-                                }
-                                
-                                if (columns.pageName && data.section === 'body' && data.column.index === pageNameColIndex) {
-                                    const rawText = data.cell.raw;
-                                    const cellX = data.cell.x;
-                                    const cellY = data.cell.y;
-                                    const cellW = data.cell.width;
-                                    const cellH = data.cell.height;
-                                    const textY = cellY + (cellH / 2) + (3 * scale); 
-
-                                    drawSingleLineFit(
-                                        String(rawText),
-                                        cellX + (2 * scale),
-                                        textY,
-                                        cellW - (4 * scale),
-                                        9 * scale,
-                                        'bold',
-                                        'left',
-                                        [0,0,0]
-                                    );
                                 }
                             },
                             margin: { left: teamX },
@@ -427,62 +437,91 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                     // CASE B: Custom Card Rendering (Grid or Multi-col List)
                     else {
                         const isGrid = layout === 'grid';
+                        
+                        // Calculate max name length in this team for row height
+                        const maxNameLength = teamPages.reduce((max, page) => {
+                            return Math.max(max, page.PageName?.length || 0);
+                        }, 0);
+                        
+                        const dynamicGridRowHeight = gridRowHeight(maxNameLength);
+                        
                         for (let j = 0; j < teamPages.length; j++) {
                             const page = teamPages[j];
                             const itemColIndex = j % itemsPerTeamRow;
                             const itemRowIndex = Math.floor(j / itemsPerTeamRow);
                             
                             const itemX = teamX + (itemColIndex * (innerItemWidth + itemGap));
-                            const itemY = localY + (itemRowIndex * (itemHeight + itemGap));
-                            const itemHeight = isGrid ? gridRowHeight : listRowHeight;
+                            const itemY = localY + (itemRowIndex * ((isGrid ? dynamicGridRowHeight : listRowHeight) + itemGap));
+                            const itemHeight = isGrid ? dynamicGridRowHeight : listRowHeight;
                             const imgSize = isGrid ? (25 * scale) : (16 * scale);
 
                             doc.setDrawColor(220, 220, 220);
                             doc.setFillColor(255, 255, 255);
-                            doc.roundedRect(itemX, itemY, innerItemWidth, itemHeight, 1.5 * scale, 1.5 * scale, 'FD');
+                            doc.roundedRect(itemX, itemY, innerItemWidth, itemHeight, 2 * scale, 2 * scale, 'FD');
 
                             let hasImageDrawn = false;
                             if (columns.logoImage) {
                                 if (imageMap[page.PageName]) {
                                     try {
-                                        const imgX = isGrid ? itemX + (innerItemWidth - imgSize)/2 : itemX + (3 * scale);
-                                        const imgY = isGrid ? itemY + (5 * scale) : itemY + (itemHeight - imgSize)/2;
+                                        const imgX = isGrid ? itemX + (innerItemWidth - imgSize)/2 : itemX + (4 * scale);
+                                        const imgY = isGrid ? itemY + (8 * scale) : itemY + (itemHeight - imgSize)/2;
+                                        
+                                        // Draw Image Border
+                                        doc.setDrawColor(230, 230, 230);
+                                        doc.setLineWidth(0.3 * scale);
+                                        doc.roundedRect(imgX - (1*scale), imgY - (1*scale), imgSize + (2*scale), imgSize + (2*scale), 1 * scale, 1 * scale, 'S');
+                                        
                                         doc.addImage(`data:image/jpeg;base64,${imageMap[page.PageName]}`, 'JPEG', imgX, imgY, imgSize, imgSize);
                                         hasImageDrawn = true;
                                     } catch (e) {}
                                 } else if (isGrid) {
+                                    // Placeholder circle
                                     doc.setFillColor(240, 240, 240);
-                                    doc.circle(itemX + innerItemWidth/2, itemY + 5*scale + imgSize/2, imgSize/2, 'F');
+                                    doc.setDrawColor(220, 220, 220);
+                                    doc.setLineWidth(0.3 * scale);
+                                    doc.circle(itemX + innerItemWidth/2, itemY + 8*scale + imgSize/2, imgSize/2, 'FD');
                                     hasImageDrawn = true;
                                 }
                             }
 
                             if (isGrid) {
-                                let currentTextY = itemY + (hasImageDrawn ? (imgSize + 8 * scale) : (5 * scale));
-                                const maxWidth = innerItemWidth - (4 * scale); 
+                                let currentTextY = itemY + (hasImageDrawn ? (imgSize + 12 * scale) : (8 * scale));
+                                const maxWidth = innerItemWidth - (10 * scale);
                                 const textCenterX = itemX + (innerItemWidth / 2);
 
-                                const nameY = columns.telegramValue ? currentTextY : (itemY + (itemHeight/2) + (2*scale));
+                                // Calculate appropriate font size based on name length
+                                const nameLength = page.PageName?.length || 0;
+                                let nameFontSize = 10 * scale;
+                                
+                                if (nameLength > 40) nameFontSize = 7 * scale;
+                                else if (nameLength > 30) nameFontSize = 8 * scale;
+                                else if (nameLength > 20) nameFontSize = 9 * scale;
                                 
                                 if (columns.pageName) {
-                                    drawSingleLineFit(
+                                    const nameY = columns.telegramValue ? currentTextY : (itemY + (itemHeight/2) + (3*scale));
+                                    
+                                    drawPerfectFitText(
                                         page.PageName || 'Unknown',
                                         textCenterX,
                                         nameY + (4*scale),
                                         maxWidth,
-                                        10 * scale,
-                                        'bold',
+                                        nameFontSize,
+                                        pageNameFontWeight, // Use user selected font weight
                                         'center',
-                                        [0, 0, 0]
+                                        [0, 0, 0],
+                                        true // Allow text wrapping for long names
                                     );
+                                    currentTextY += 16 * scale;
                                 }
 
                                 if (columns.telegramValue) {
-                                    const telY = nameY + (10 * scale);
-                                    drawSingleLineFit(
-                                        page.TelegramValue || '-',
+                                    const telText = page.TelegramValue || '-';
+                                    const telY = currentTextY + (2 * scale);
+                                    
+                                    drawPerfectFitText(
+                                        telText,
                                         textCenterX,
-                                        telY + (4*scale),
+                                        telY + (2*scale),
                                         maxWidth,
                                         8 * scale,
                                         'normal',
@@ -492,29 +531,41 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                                 }
 
                             } else {
-                                const contentStartX = itemX + (columns.logoImage ? (imgSize + 6*scale) : 5*scale);
-                                const contentWidth = innerItemWidth - (contentStartX - itemX) - (2 * scale);
-                                const contentY = itemY + (2 * scale);
-                                const contentHeight = itemHeight - (4 * scale);
+                                // List layout (non-table, multi-column)
+                                const contentStartX = itemX + (columns.logoImage ? (imgSize + 8*scale) : 6*scale);
+                                const contentWidth = innerItemWidth - (contentStartX - itemX) - (6 * scale);
+                                const contentY = itemY + (4 * scale);
+                                const contentHeight = itemHeight - (8 * scale);
+                                
+                                // Calculate text position
                                 let textCenterY = contentY + (contentHeight/2);
-
+                                
                                 if (columns.pageName) {
-                                    const nameY = columns.telegramValue ? (textCenterY - (3*scale)) : textCenterY + (2*scale);
-                                    drawSingleLineFit(
+                                    const nameY = columns.telegramValue ? (textCenterY - (4*scale)) : textCenterY + (3*scale);
+                                    
+                                    // Calculate font size based on name length for list layout
+                                    const nameLength = page.PageName?.length || 0;
+                                    let nameFontSize = 9 * scale;
+                                    if (nameLength > 25) nameFontSize = 7 * scale;
+                                    else if (nameLength > 15) nameFontSize = 8 * scale;
+                                    
+                                    drawPerfectFitText(
                                         page.PageName || 'Unknown',
                                         contentStartX,
                                         nameY,
                                         contentWidth,
-                                        9 * scale,
-                                        'bold',
+                                        nameFontSize,
+                                        pageNameFontWeight, // Use user selected font weight
                                         'left',
-                                        [0, 0, 0]
+                                        [0, 0, 0],
+                                        true // Allow text wrapping for long names
                                     );
                                 }
                                 
                                 if (columns.telegramValue) {
-                                    const telY = columns.pageName ? (textCenterY + (6*scale)) : textCenterY + (2*scale);
-                                    drawSingleLineFit(
+                                    const telY = columns.pageName ? (textCenterY + (10*scale)) : textCenterY + (3*scale);
+                                    
+                                    drawPerfectFitText(
                                         page.TelegramValue || '',
                                         contentStartX,
                                         telY,
@@ -539,9 +590,14 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                 doc.setFontSize(8 * scale);
                 doc.setTextColor(150, 150, 150);
                 doc.text(`Page ${i} of ${pageCount}`, width - minMargin, finalDocHeight - (5 * scale), { align: 'right' });
+                
+                // Add footer note about text size and font weight
+                doc.setFontSize(6 * scale);
+                doc.text(`*ឈ្មោះ Page ត្រូវបានបង្ហាញពេញលេញ - អក្សរ: ${pageNameFontWeight === 'bold' ? 'Bold' : 'Normal'}`, 
+                    minMargin, finalDocHeight - (5 * scale), { align: 'left' });
             }
 
-            doc.save(`Pages_Report_${layout}_${new Date().toISOString().slice(0, 10)}.pdf`);
+            doc.save(`Pages_Report_${layout}_${pageNameFontWeight}_${new Date().toISOString().slice(0, 10)}.pdf`);
             onClose();
 
         } catch (error) {
@@ -560,7 +616,7 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l6-6a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
-                    Export Pages to PDF (High Quality)
+                    Export Pages to PDF (Full Text Display)
                 </h2>
                 <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
@@ -578,6 +634,8 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                                 <select value={pageSize} onChange={(e) => setPageSize(e.target.value as PageSize)} className="form-select">
                                     <option value="a4">A4</option>
                                     <option value="a3">A3</option>
+                                    <option value="letter">Letter</option>
+                                    <option value="legal">Legal</option>
                                     <option value="1080p">1920x1080 (FHD)</option>
                                 </select>
                             </div>
@@ -601,12 +659,47 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                     <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
                         <h3 className="text-lg font-semibold text-blue-300 mb-3">រូបរាង (Layout)</h3>
                         
-                        <div className="mb-6">
+                        <div className="mb-4">
                             <label className="block text-sm text-gray-400 mb-2">ទម្រង់បង្ហាញ Page (Page Style):</label>
                             <div className="flex bg-gray-900 rounded p-1">
                                 <button onClick={() => setLayout('list')} className={`flex-1 py-2 rounded text-sm font-medium transition-colors ${layout === 'list' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>បញ្ជី (List)</button>
                                 <button onClick={() => setLayout('grid')} className={`flex-1 py-2 rounded text-sm font-medium transition-colors ${layout === 'grid' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>ក្រឡា (Grid)</button>
                             </div>
+                        </div>
+
+                        {/* 2.1 Font Weight Setting */}
+                        <div className="mb-4">
+                            <label className="block text-sm text-gray-400 mb-2">ទម្ងន់អក្សរឈ្មោះ Page (Font Weight):</label>
+                            <div className="flex bg-gray-900 rounded p-1">
+                                <button 
+                                    onClick={() => setPageNameFontWeight('bold')} 
+                                    className={`flex-1 py-2 rounded text-sm font-medium transition-colors ${pageNameFontWeight === 'bold' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    Bold
+                                </button>
+                                <button 
+                                    onClick={() => setPageNameFontWeight('normal')} 
+                                    className={`flex-1 py-2 rounded text-sm font-medium transition-colors ${pageNameFontWeight === 'normal' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    Normal
+                                </button>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                                {pageNameFontWeight === 'bold' 
+                                    ? "✓ អក្សរ Bold - ងាយមើល ប៉ុន្តែអាចយកទីធំជាង" 
+                                    : "✓ អក្សរ Normal - សន្សំទីត្បូង អាចមើលឃើញច្រើនជាង"}
+                            </p>
+                        </div>
+
+                        {/* Tips Box */}
+                        <div className="mt-4 p-3 bg-blue-900/20 border border-blue-700/50 rounded text-sm mb-4">
+                            <p className="text-blue-300 font-medium mb-1">✨ លក្ខណៈពិសេសថ្មី:</p>
+                            <ul className="text-gray-300 text-xs list-disc pl-4 space-y-1">
+                                <li>ឈ្មោះ Page ត្រូវបានបង្ហាញពេញលេញ (គ្មានការកាត់ឃ្លា)</li>
+                                <li>អាចកំណត់ទម្ងន់អក្សរជា Bold ឬ Normal</li>
+                                <li>ទំហំអក្សរប្រែប្រួលដោយស្វ័យប្រវត្តិ</li>
+                                <li>ឈ្មោះវែងអាចចុះបន្ទាត់ជាពីរជួរ</li>
+                            </ul>
                         </div>
 
                         {/* Teams Per Row Slider */}
@@ -638,6 +731,13 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                                 className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
                             />
                             <div className="flex justify-between text-xs text-gray-500 mt-1"><span>1 (Table)</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span></div>
+                            <p className="text-xs text-gray-400 mt-2">
+                                {itemsPerTeamRow === 1 && layout === 'list' 
+                                    ? "✓ ទម្រង់តារាង - ល្អសម្រាប់ឈ្មោះវែង" 
+                                    : itemsPerTeamRow > 4 
+                                    ? "⚠ អាចធ្វើអោយទំហំអក្សរតូចពេក" 
+                                    : "✓ ទំហំល្មមសម្រាប់អត្ថបទពេញលេញ"}
+                            </p>
                         </div>
                     </div>
 
@@ -698,7 +798,7 @@ const PagesPdfExportModal: React.FC<PagesPdfExportModalProps> = ({ isOpen, onClo
                                             {teamPages.map(page => (
                                                 <label key={page.PageName} className="flex items-center space-x-3 cursor-pointer hover:bg-gray-800 p-1.5 rounded transition-colors">
                                                     <input type="checkbox" checked={selectedPageNames.has(page.PageName)} onChange={() => togglePageSelection(page.PageName)} className="form-checkbox h-4 w-4 text-blue-500 rounded bg-gray-900 border-gray-600" />
-                                                    <span className="text-sm text-gray-300 truncate">{page.PageName}</span>
+                                                    <span className="text-sm text-gray-300 truncate" title={page.PageName}>{page.PageName}</span>
                                                 </label>
                                             ))}
                                         </div>
