@@ -1,4 +1,5 @@
-import React, { useState, useEffect, createContext, useCallback, Suspense } from 'react';
+
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { User, AppData, MasterProduct } from './types';
 import { GoogleGenAI } from "@google/genai";
 import { WEB_APP_URL } from './constants';
@@ -6,6 +7,7 @@ import { useUrlState } from './hooks/useUrlState';
 import Spinner from './components/common/Spinner';
 import Modal from './components/common/Modal';
 import DataErrorModal from './components/common/DataErrorModal';
+import { AppContext, AppContextType } from './context/AppContext';
 
 // Lazy load pages and complex components to prevent circular dependency issues
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
@@ -15,29 +17,6 @@ const UserJourney = React.lazy(() => import('./pages/UserJourney'));
 const Header = React.lazy(() => import('./components/common/Header'));
 const ImpersonationBanner = React.lazy(() => import('./components/common/ImpersonationBanner'));
 const ChatWidget = React.lazy(() => import('./components/chat/ChatWidget'));
-
-export interface AppContextType {
-    currentUser: User | null;
-    appData: AppData;
-    login: (user: User) => void;
-    logout: () => void;
-    refreshData: () => Promise<void>;
-    originalAdminUser: User | null;
-    returnToAdmin: () => void;
-    previewImage: (url: string) => void;
-    updateCurrentUser: (updatedData: Partial<User>) => void;
-    setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
-    geminiAi: GoogleGenAI | null;
-    updateProductInData: (productName: string, newData: Partial<MasterProduct>) => void;
-    apiKey: string;
-    setAppState: (newState: 'login' | 'role_selection' | 'admin_dashboard' | 'user_journey') => void;
-    setOriginalAdminUser: React.Dispatch<React.SetStateAction<User | null>>;
-    fetchData: (force?: boolean) => Promise<void>;
-    setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
-    setChatVisibility: (visible: boolean) => void;
-}
-
-export const AppContext = createContext<AppContextType>({} as AppContextType);
 
 // Default empty state to prevent undefined errors
 const initialAppData: AppData = {
@@ -82,13 +61,8 @@ const App: React.FC = () => {
     // Initialize Gemini AI using environment variable
     useEffect(() => {
         try {
-            // Check if API_KEY exists and is not empty before initializing to prevent crashes
-            if (process.env.API_KEY && process.env.API_KEY.trim() !== '') {
-                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-                setGeminiAi(ai);
-            } else {
-                console.warn("API_KEY is missing. Gemini AI features will be disabled.");
-            }
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            setGeminiAi(ai);
         } catch (e) {
             console.error("Failed to initialize Gemini AI", e);
         }
@@ -150,31 +124,21 @@ const App: React.FC = () => {
         }
 
         try {
-            // Fetch static data AND users in parallel to ensure we have user info for order enrichment
-            const [staticResponse, usersResponse] = await Promise.all([
-                fetch(`${WEB_APP_URL}/api/static-data`),
-                fetch(`${WEB_APP_URL}/api/users`)
-            ]);
-
-            if (staticResponse.ok && usersResponse.ok) {
-                const staticResult = await staticResponse.json();
-                const usersResult = await usersResponse.json();
-
-                if (staticResult.status === 'success' && usersResult.status === 'success') {
+            const response = await fetch(`${WEB_APP_URL}/api/static-data`);
+            if (response.ok) {
+                const result = await response.json();
+                if (result.status === 'success') {
                     // Normalize the data before setting state
-                    const normalizedData = normalizeData(staticResult.data);
-                    
-                    // Manually merge users since they come from a separate endpoint
-                    normalizedData.users = usersResult.data || [];
+                    const normalizedData = normalizeData(result.data);
                     
                     setAppData(normalizedData);
                     localStorage.setItem(cacheKey, JSON.stringify({ data: normalizedData, timestamp: Date.now() }));
                     setDataError(null); // Clear error on success
                 } else {
-                    throw new Error(staticResult.message || usersResult.message || "Unknown error from server");
+                    throw new Error(result.message || "Unknown error from server");
                 }
             } else {
-                throw new Error(`HTTP Error: Static ${staticResponse.status} / Users ${usersResponse.status}`);
+                throw new Error(`HTTP Error: ${response.status}`);
             }
         } catch (e: any) {
             console.error("Failed to fetch data", e);

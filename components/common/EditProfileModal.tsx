@@ -1,6 +1,6 @@
 
 import React, { useState, useContext, useRef } from 'react';
-import { AppContext } from '../../App';
+import { AppContext } from '../../context/AppContext';
 import Modal from './Modal';
 import Spinner from './Spinner';
 import { WEB_APP_URL } from '../../constants';

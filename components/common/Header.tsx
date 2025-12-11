@@ -1,5 +1,6 @@
+
 import React, { useState, useContext, useRef, useEffect } from 'react';
-import { AppContext } from '../../App';
+import { AppContext } from '../../context/AppContext';
 import EditProfileModal from './EditProfileModal';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
 import UserAvatar from './UserAvatar';
@@ -49,7 +50,7 @@ const Header: React.FC<HeaderProps> = ({ onBackToRoleSelect }) => {
 
                         <div className="relative" ref={dropdownRef}>
                             <button onClick={() => setDropdownOpen(!dropdownOpen)} className="p-2 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white">
-                                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
                             </button>
                             {dropdownOpen && (
                                 <div className="absolute right-0 mt-2 w-56 bg-gray-800 rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5">
