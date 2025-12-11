@@ -1,39 +1,17 @@
+
 import React, { useState, useContext, useEffect, useMemo } from 'react';
-import { AppContext } from '../App';
-import { ParsedOrder, FullOrder, User } from '../types';
+import { AppContext } from '../context/AppContext';
+import { ParsedOrder, FullOrder } from '../types';
 import { WEB_APP_URL } from '../constants';
 import Spinner from '../components/common/Spinner';
 import OrdersList from '../components/orders/OrdersList';
 import CreateOrderPage from './CreateOrderPage';
 
-// --- Types & Constants for Filters ---
-type DateRangePreset = 'all' | 'today' | 'last_day' | 'this_week' | 'this_month' | 'last_month' | 'custom';
-
-const datePresets: { label: string, value: DateRangePreset }[] = [
-    { label: 'ថ្ងៃនេះ (Today)', value: 'today' },
-    { label: 'ម្សិលមិញ (Yesterday)', value: 'last_day' },
-    { label: 'សប្តាហ៍នេះ (This Week)', value: 'this_week' },
-    { label: 'ខែនេះ (This Month)', value: 'this_month' },
-    { label: 'ខែមុន (Last Month)', value: 'last_month' },
-    { label: 'ទាំងអស់ (All Time)', value: 'all' },
-    { label: 'កំណត់កាលបរិច្ឆេទ (Custom)', value: 'custom' },
-];
-
 const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
-    const { appData } = useContext(AppContext);
     const [orders, setOrders] = useState<ParsedOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
-    
-    // --- Filter State ---
-    const [showFilters, setShowFilters] = useState(false);
-    const [filters, setFilters] = useState({
-        datePreset: 'today' as DateRangePreset, // Default to Today
-        startDate: new Date().toISOString().split('T')[0],
-        endDate: new Date().toISOString().split('T')[0],
-        paymentStatus: '',
-    });
 
     useEffect(() => {
         const fetchOrders = async () => {
@@ -58,51 +36,26 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
                     throw new Error(result.message || 'Error in API response for orders.');
                 }
                 
+                // SAFEGUARD: Ensure data is an array and filter out NULL items specifically
                 const allOrders: FullOrder[] = Array.isArray(result.data) 
                     ? result.data.filter((o: any) => o !== null && typeof o === 'object') 
                     : [];
                 
-                // --- DATA ENRICHMENT START ---
-                const enrichedOrders = allOrders.map(order => {
-                    // SAFEGUARD: Cast to string
-                    let derivedTeam = String(order.Team || '').trim();
-                    const orderUser = String(order.User || '').trim();
-                    
-                    if (!derivedTeam && orderUser && appData.users) {
-                        const foundUser = appData.users.find((u: User) => 
-                            u && u.UserName && 
-                            String(u.UserName).toLowerCase().trim() === orderUser.toLowerCase()
-                        );
-                        
-                        if (foundUser && foundUser.Team) {
-                            const teams = String(foundUser.Team).split(',').map(t => t.trim()).filter(Boolean);
-                            if (teams.length > 0) {
-                                derivedTeam = teams[0];
-                            }
-                        }
-                    }
-                    return { ...order, Team: derivedTeam };
-                });
-                // --- DATA ENRICHMENT END ---
-
-                const targetTeam = String(team).toLowerCase().trim();
-                const teamOrders = enrichedOrders.filter(o => String(o.Team || '').toLowerCase().trim() === targetTeam);
+                const teamOrders = allOrders.filter(o => o.Team === team);
 
                 const parsed = teamOrders.map(o => {
                     let products = [];
                     try {
                         if (o['Products (JSON)'] && typeof o['Products (JSON)'] === 'string') {
-                            const parsedProducts = JSON.parse(o['Products (JSON)']);
-                            // SAFEGUARD: Ensure result is an array
-                            products = Array.isArray(parsedProducts) ? parsedProducts : [];
+                            products = JSON.parse(o['Products (JSON)']);
                         }
                     } catch(e) { 
                         console.error("Failed to parse products JSON for order:", o['Order ID'], o['Products (JSON)']);
-                        products = [];
                     }
                     return { ...o, Products: products };
                 });
 
+                // SAFEGUARD: Safe sorting for timestamps
                 parsed.sort((a, b) => {
                     const tA = a.Timestamp ? new Date(a.Timestamp).getTime() : 0;
                     const tB = b.Timestamp ? new Date(b.Timestamp).getTime() : 0;
@@ -117,200 +70,47 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
             }
         };
         fetchOrders();
-    }, [team, appData.users]); 
-
-    // --- Filter Logic Helper ---
-    const toLocalYYYYMMDD = (d: Date) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-
-    const handleFilterChange = (field: keyof typeof filters, value: string) => {
-        const newFilters = { ...filters, [field]: value };
-
-        if (field === 'datePreset') {
-            const preset = value as DateRangePreset;
-            const now = new Date();
-            let start = new Date(now);
-            let end = new Date(now);
-            
-            // Adjust time to cover full days in local time logic context
-            // Note: Actual filtering does string comparison or date object comparison
-            
-            switch (preset) {
-                case 'today': 
-                    // Already set to now
-                    break;
-                case 'last_day':
-                    start.setDate(now.getDate() - 1);
-                    end.setDate(now.getDate() - 1);
-                    break;
-                case 'this_week':
-                    const dayOfWeek = now.getDay();
-                    start.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)); // Monday as start
-                    end = new Date(start);
-                    end.setDate(start.getDate() + 6);
-                    break;
-                case 'this_month':
-                    start = new Date(now.getFullYear(), now.getMonth(), 1);
-                    end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-                    break;
-                case 'last_month':
-                    start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                    end = new Date(now.getFullYear(), now.getMonth(), 0);
-                    break;
-                case 'all':
-                    // We handle 'all' in the filter function
-                    break;
-            }
-
-            if (preset !== 'all' && preset !== 'custom') {
-                newFilters.startDate = toLocalYYYYMMDD(start);
-                newFilters.endDate = toLocalYYYYMMDD(end);
-            }
-        }
-        setFilters(newFilters);
-    };
+    }, [team]);
     
     const filteredOrders = useMemo(() => {
-        let result = orders;
-
-        // 1. Date Filter
-        if (filters.datePreset !== 'all') {
-            const startDate = filters.startDate ? new Date(`${filters.startDate}T00:00:00`) : null;
-            const endDate = filters.endDate ? new Date(`${filters.endDate}T23:59:59`) : null;
-            
-            result = result.filter(order => {
-                if (!order.Timestamp) return false;
-                const orderDate = new Date(order.Timestamp);
-                if (startDate && orderDate < startDate) return false;
-                if (endDate && orderDate > endDate) return false;
-                return true;
-            });
-        }
-
-        // 2. Payment Status Filter
-        if (filters.paymentStatus) {
-            result = result.filter(order => order['Payment Status'] === filters.paymentStatus);
-        }
-
-        // 3. Search Query
-        if (searchQuery.trim()) {
-            const lowerQuery = searchQuery.toLowerCase().trim();
-            result = result.filter(o => 
-                String(o['Order ID'] || '').toLowerCase().includes(lowerQuery) ||
-                String(o['Customer Name'] || '').toLowerCase().includes(lowerQuery) ||
-                String(o['Customer Phone'] || '').includes(lowerQuery) ||
-                String(o.User || '').toLowerCase().includes(lowerQuery) ||
-                (Array.isArray(o.Products) && o.Products.some(p => String(p.name || '').toLowerCase().includes(lowerQuery)))
-            );
-        }
-
-        return result;
-    }, [orders, searchQuery, filters]);
+        if (!searchQuery.trim()) return orders;
+        const lowerQuery = searchQuery.toLowerCase().trim();
+        return orders.filter(o => 
+            (o['Order ID'] || '').toLowerCase().includes(lowerQuery) ||
+            (o['Customer Name'] || '').toLowerCase().includes(lowerQuery) ||
+            (o['Customer Phone'] || '').includes(lowerQuery) ||
+            (o.User && o.User.toLowerCase().includes(lowerQuery)) ||
+            (o.Products && Array.isArray(o.Products) && o.Products.some(p => (p.name || '').toLowerCase().includes(lowerQuery)))
+        );
+    }, [orders, searchQuery]);
 
     if (loading) return <div className="flex justify-center items-center h-64"><Spinner size="lg"/></div>;
     if (error) return <p className="text-center text-red-400 p-8">{error}</p>;
 
+    if (orders.length === 0 && !loading) {
+        return (
+            <div className="text-center p-8 page-card">
+                <h3 className="text-xl font-semibold text-white">មិនមានប្រតិបត្តិការណ៍</h3>
+                <p className="text-gray-400 mt-2">រកមិនឃើញការកម្មង់សម្រាប់ក្រុម {team} ទេ។</p>
+            </div>
+        )
+    }
+
     return (
         <div className="space-y-4">
-            <div className="flex flex-col gap-3">
-                <div className="flex gap-2">
-                    <div className="relative flex-grow">
-                        <input
-                            type="text"
-                            placeholder="ស្វែងរក (Order ID, ឈ្មោះ, លេខទូរស័ព្ទ)..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="form-input !pl-10 w-full"
-                        />
-                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                    </div>
-                    <button 
-                        onClick={() => setShowFilters(!showFilters)} 
-                        className={`btn ${showFilters ? 'btn-primary' : 'btn-secondary'} flex-shrink-0 !p-3`}
-                        title="Filter Options"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                        </svg>
-                    </button>
-                </div>
-
-                {/* Filter Panel */}
-                {showFilters && (
-                    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
-                        <div>
-                            <label className="input-label">កាលបរិច្ឆេទ (Date Range)</label>
-                            <select 
-                                value={filters.datePreset} 
-                                onChange={(e) => handleFilterChange('datePreset', e.target.value)} 
-                                className="form-select"
-                            >
-                                {datePresets.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                            </select>
-                        </div>
-
-                        {filters.datePreset === 'custom' && (
-                            <>
-                                <div>
-                                    <label className="input-label">ចាប់ពីថ្ងៃ (From)</label>
-                                    <input 
-                                        type="date" 
-                                        value={filters.startDate} 
-                                        onChange={(e) => handleFilterChange('startDate', e.target.value)} 
-                                        className="form-input" 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="input-label">ដល់ថ្ងៃ (To)</label>
-                                    <input 
-                                        type="date" 
-                                        value={filters.endDate} 
-                                        onChange={(e) => handleFilterChange('endDate', e.target.value)} 
-                                        className="form-input" 
-                                    />
-                                </div>
-                            </>
-                        )}
-
-                        <div>
-                            <label className="input-label">ស្ថានភាពទូទាត់ (Payment)</label>
-                            <select 
-                                value={filters.paymentStatus} 
-                                onChange={(e) => handleFilterChange('paymentStatus', e.target.value)} 
-                                className="form-select"
-                            >
-                                <option value="">ទាំងអស់ (All)</option>
-                                <option value="Paid">បង់ប្រាក់រួច (Paid)</option>
-                                <option value="Unpaid">មិនទាន់បង់ (Unpaid)</option>
-                            </select>
-                        </div>
-                    </div>
-                )}
+            <div className="relative max-w-md">
+                <input
+                    type="text"
+                    placeholder="ស្វែងរក (Order ID, ឈ្មោះ, លេខទូរស័ព្ទ)..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="form-input !pl-10"
+                />
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
             </div>
-
-            {filteredOrders.length === 0 ? (
-                <div className="text-center p-8 page-card">
-                    <h3 className="text-xl font-semibold text-white">មិនមានប្រតិបត្តិការណ៍</h3>
-                    <p className="text-gray-400 mt-2">
-                        {filters.datePreset === 'today' 
-                            ? 'មិនទាន់មានការកម្មង់សម្រាប់ថ្ងៃនេះទេ។' 
-                            : 'រកមិនឃើញការកម្មង់តាមលក្ខខណ្ឌដែលបានជ្រើសរើសទេ។'}
-                    </p>
-                </div>
-            ) : (
-                <div className="flex flex-col gap-2">
-                    <div className="text-sm text-gray-400 text-right px-2">
-                        បង្ហាញ {filteredOrders.length} ការកម្មង់ {filters.datePreset !== 'all' ? `(${filters.startDate} - ${filters.endDate})` : ''}
-                    </div>
-                    <OrdersList orders={filteredOrders} showActions={false} />
-                </div>
-            )}
+            <OrdersList orders={filteredOrders} showActions={false} />
         </div>
     );
 };
@@ -320,11 +120,13 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
     const [view, setView] = useState<'list' | 'create'>('list');
     const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
 
+    // Filter and clean team names
     const userTeams = useMemo(() => {
         if (!currentUser?.Team) return [];
         return currentUser.Team.split(',').map(t => t.trim()).filter(Boolean);
     }, [currentUser]);
 
+    // Manage Chat Visibility based on view
     useEffect(() => {
         if (view === 'create') {
             setChatVisibility(false);
@@ -334,12 +136,14 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
         return () => setChatVisibility(true);
     }, [view, setChatVisibility]);
 
+    // Auto-select team if user has only one
     useEffect(() => {
         if (userTeams.length === 1 && !selectedTeam) {
             setSelectedTeam(userTeams[0]);
         }
     }, [userTeams, selectedTeam]);
 
+    // CASE 1: No Team Assigned
     if (userTeams.length === 0) {
         return (
             <div className="w-full max-w-2xl mx-auto page-card text-center p-12 mt-20">
@@ -355,6 +159,7 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
         )
     }
 
+    // CASE 2: Team Selection (Multi-team user)
     if (userTeams.length > 1 && !selectedTeam) {
         return (
              <div className="w-full max-w-5xl mx-auto p-4 mt-10 md:mt-20 animate-fade-in">
@@ -363,6 +168,7 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
                 `}</style>
                 
                 <div className="flex justify-start mb-8 relative z-10">
+                    {/* Only show Back button if user is System Admin */}
                     {currentUser?.IsSystemAdmin && (
                         <button 
                             onClick={onBackToRoleSelect} 
@@ -402,7 +208,8 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
         )
     }
 
-    if (!selectedTeam) return null;
+    // CASE 3: Inside a Team (View List or Create)
+    if (!selectedTeam) return null; // Should be handled by logic above
 
     if (view === 'create') {
         return <CreateOrderPage team={selectedTeam} onSaveSuccess={() => setView('list')} onCancel={() => setView('list')} />;
@@ -413,6 +220,7 @@ const UserJourney: React.FC<{ onBackToRoleSelect: () => void }> = ({ onBackToRol
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                 <div>
                     <div className="flex items-center gap-3 mb-2">
+                        {/* Only show Back button here if user is System Admin */}
                         {currentUser?.IsSystemAdmin && (
                             <button onClick={onBackToRoleSelect} className="btn btn-secondary !py-1 !px-2 text-xs flex items-center gap-1" title="Back to Role Selection">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
