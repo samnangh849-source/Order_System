@@ -1,21 +1,18 @@
+
 import React, { useState, useMemo, useContext, useEffect } from 'react';
-import { ParsedOrder, User, AppData, MasterProduct, ShippingMethod } from '../../types';
-import { AppContext } from '../../App';
+import { ParsedOrder } from '../../types';
+import { AppContext } from '../../context/AppContext';
 import { analyzeReportData, generateSalesForecast } from '../../services/geminiService';
 import GeminiButton from '../common/GeminiButton';
 import Spinner from '../common/Spinner';
 import SimpleBarChart from './SimpleBarChart';
-import { convertGoogleDriveUrl } from '../../utils/fileUtils';
-import SearchableProductDropdown from '../common/SearchableProductDropdown';
+import SimpleLineChart from '../common/SimpleLineChart';
 
 interface ReportsViewProps {
     orders: ParsedOrder[];
     allOrders: ParsedOrder[]; // For forecasting
     reportType: 'overview' | 'performance' | 'profitability' | 'forecasting' | 'shipping';
 }
-
-type ProfitView = 'product' | 'page' | 'team';
-type ShippingCostView = 'service' | 'driver';
 
 const ColumnToggler = ({ columns, visibleColumns, onToggle }: { columns: { key: string, label: string }[], visibleColumns: Set<string>, onToggle: (key: string) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -33,21 +30,21 @@ const ColumnToggler = ({ columns, visibleColumns, onToggle }: { columns: { key: 
 
     return (
         <div className="relative" ref={ref}>
-            <button onClick={() => setIsOpen(!isOpen)} className="btn btn-secondary !py-1 !px-3 text-sm">
+            <button onClick={() => setIsOpen(!isOpen)} className="btn btn-secondary !py-1 !px-3 text-sm flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
                 Columns
             </button>
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-gray-700 border border-gray-600 rounded-md shadow-lg z-20">
+                <div className="absolute right-0 mt-2 w-64 bg-gray-700 border border-gray-600 rounded-md shadow-lg z-20 max-h-80 overflow-y-auto">
                     {columns.map(col => (
-                        <label key={col.key} className="flex items-center px-3 py-2 text-sm text-gray-200 hover:bg-gray-600 cursor-pointer">
+                        <label key={col.key} className="flex items-center px-3 py-2 text-sm text-gray-200 hover:bg-gray-600 cursor-pointer border-b border-gray-600 last:border-0">
                             <input
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-blue-500 focus:ring-blue-500"
+                                className="h-4 w-4 rounded border-gray-500 bg-gray-800 text-blue-500 focus:ring-blue-500 flex-shrink-0"
                                 checked={visibleColumns.has(col.key)}
                                 onChange={() => onToggle(col.key)}
                             />
-                            <span className="ml-3">{col.label}</span>
+                            <span className="ml-3 truncate">{col.label}</span>
                         </label>
                     ))}
                 </div>
@@ -56,30 +53,52 @@ const ColumnToggler = ({ columns, visibleColumns, onToggle }: { columns: { key: 
     );
 }
 
-const DataTable = ({ title, data, columns, visibleColumns, onColumnToggle, className = '' }: { title: string, data: any[], columns: { key: string, label: string, render?: (value: any, row: any) => React.ReactNode }[], visibleColumns: Set<string>, onColumnToggle: (key: string) => void, className?: string }) => {
+const DataTable = ({ title, data, columns, visibleColumns, onColumnToggle }: { title: string, data: any[], columns: { key: string, label: string, render?: (value: any, row: any, index: number) => React.ReactNode }[], visibleColumns: Set<string>, onColumnToggle: (key: string) => void }) => {
     const activeColumns = useMemo(() => columns.filter(c => visibleColumns.has(c.key)), [columns, visibleColumns]);
+    const [showBorders, setShowBorders] = useState(true);
 
     return (
-        <div className={`page-card ${className}`}>
-            <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col h-full bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+            <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                 <h3 className="text-lg font-bold text-white">{title}</h3>
-                <ColumnToggler columns={columns} visibleColumns={visibleColumns} onToggle={onColumnToggle} />
+                <div className="flex items-center space-x-2">
+                    <button 
+                        onClick={() => setShowBorders(!showBorders)} 
+                        className={`btn btn-secondary !py-1 !px-2 ${showBorders ? 'bg-blue-600/50 text-white' : ''}`} 
+                        title={showBorders ? "Hide Borders" : "Show Borders"}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M5 4a3 3 0 00-3 3v6a3 3 0 003 3h10a3 3 0 003-3V7a3 3 0 00-3-3H5zm-1 9v-1h5v2H5a1 1 0 01-1-1zm7 1h4a1 1 0 001-1v-1h-5v2zm0-4h5V8h-5v2zM9 8H4v2h5V8z" clipRule="evenodd" />
+                        </svg>
+                    </button>
+                    <ColumnToggler columns={columns} visibleColumns={visibleColumns} onToggle={onColumnToggle} />
+                </div>
             </div>
-            <div className="overflow-auto max-h-[calc(100vh-25rem)]">
-                <table className="report-table">
-                    <thead>
-                        <tr>{activeColumns.map(c => <th key={c.key}>{c.label}</th>)}</tr>
+            <div className="overflow-auto flex-grow">
+                 <table className={`report-table w-full border-collapse ${showBorders ? 'border border-gray-600' : ''}`}>
+                    <thead className="bg-gray-800 sticky top-0 z-10">
+                        <tr>
+                            {activeColumns.map(c => (
+                                <th key={c.key} className={`${showBorders ? 'border border-gray-600' : 'border-b border-gray-700'} px-4 py-3 text-left whitespace-nowrap`}>
+                                    {c.label}
+                                </th>
+                            ))}
+                        </tr>
                     </thead>
                     <tbody>
                         {data.length > 0 ? data.map((row, index) => (
-                            <tr key={index}>
+                            <tr key={index} className="hover:bg-gray-700/50 transition-colors">
                                 {activeColumns.map(col => {
                                     const value = row[col.key];
-                                    return <td key={col.key}>{col.render ? col.render(value, row) : value}</td>
+                                    return (
+                                        <td key={col.key} className={`${showBorders ? 'border border-gray-600' : 'border-b border-gray-800'} px-4 py-2 text-sm whitespace-nowrap`}>
+                                            {col.render ? col.render(value, row, index) : value}
+                                        </td>
+                                    );
                                 })}
                             </tr>
                         )) : (
-                            <tr><td colSpan={activeColumns.length} className="text-center text-gray-500 py-4">No data</td></tr>
+                            <tr><td colSpan={activeColumns.length} className={`text-center text-gray-500 py-8 ${showBorders ? 'border border-gray-600' : ''}`}>No data available</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -88,366 +107,262 @@ const DataTable = ({ title, data, columns, visibleColumns, onColumnToggle, class
     );
 };
 
-// New redesigned stat card
-const StatCardRedesigned = ({ title, value, change, changeType, icon }: { title: string, value: string, change: string, changeType: 'increase' | 'decrease' | 'neutral', icon: React.ReactNode }) => {
-    const changeColor = changeType === 'increase' ? 'text-green-400' : changeType === 'decrease' ? 'text-red-400' : 'text-gray-400';
-    const ChangeIcon = changeType === 'increase' ? 
-        <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /> : 
-        <path strokeLinecap="round" strokeLinejoin="round" d="M11 17l-5-5m0 0l5-5m-5 5h12" />;
+const ReportsView: React.FC<ReportsViewProps> = ({ orders, reportType, allOrders }) => {
+    const { geminiAi } = useContext(AppContext);
+    const [analysis, setAnalysis] = useState<string>('');
+    const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+    
+    // Column State Management for different tables
+    const [profitColumns, setProfitColumns] = useState(new Set(['name', 'quantity', 'revenue', 'cost', 'profit', 'margin']));
+    const [shippingColumns, setShippingColumns] = useState(new Set(['method', 'count', 'cost']));
 
-    return (
-        <div className="stat-card-new">
-            <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-400">{title}</span>
-                <div className="text-blue-400">{icon}</div>
+    // Clear analysis when data changes
+    useEffect(() => {
+        setAnalysis('');
+    }, [orders, reportType]);
+
+    // --- AGGREGATION LOGIC ---
+    const summaryData = useMemo(() => {
+        const revenue = orders.reduce((sum, o) => sum + (Number(o['Grand Total']) || 0), 0);
+        const productCost = orders.reduce((sum, o) => sum + (Number(o['Total Product Cost ($)']) || 0), 0);
+        const internalCost = orders.reduce((sum, o) => sum + (Number(o['Internal Cost']) || 0), 0);
+        const profit = revenue - productCost - internalCost;
+        const totalOrders = orders.length;
+        const aov = totalOrders > 0 ? revenue / totalOrders : 0;
+
+        return { revenue, profit, totalOrders, aov };
+    }, [orders]);
+
+    const profitabilityData = useMemo(() => {
+        const products: Record<string, { name: string, quantity: number, revenue: number, cost: number }> = {};
+        orders.forEach(order => {
+            order.Products?.forEach(p => {
+                if (!p.name) return;
+                if (!products[p.name]) products[p.name] = { name: p.name, quantity: 0, revenue: 0, cost: 0 };
+                products[p.name].quantity += (Number(p.quantity) || 0);
+                products[p.name].revenue += (Number(p.total) || 0); // Using calculated total from product
+                // Product cost calculation: cost * quantity
+                products[p.name].cost += ((Number(p.cost) || 0) * (Number(p.quantity) || 0));
+            });
+        });
+
+        return Object.values(products).map(p => ({
+            ...p,
+            profit: p.revenue - p.cost,
+            margin: p.revenue > 0 ? ((p.revenue - p.cost) / p.revenue) * 100 : 0
+        })).sort((a, b) => b.profit - a.profit);
+    }, [orders]);
+
+    const shippingData = useMemo(() => {
+        const methods: Record<string, { method: string, count: number, cost: number }> = {};
+        const drivers: Record<string, { driver: string, count: number, cost: number }> = {};
+
+        orders.forEach(order => {
+            const method = order['Internal Shipping Method'] || 'Unspecified';
+            const driver = order['Internal Shipping Details'] || 'Unassigned';
+            const cost = Number(order['Internal Cost']) || 0;
+
+            if (!methods[method]) methods[method] = { method, count: 0, cost: 0 };
+            methods[method].count += 1;
+            methods[method].cost += cost;
+
+            if (order['Internal Shipping Method'] && order['Internal Shipping Details']) {
+               if (!drivers[driver]) drivers[driver] = { driver, count: 0, cost: 0 };
+               drivers[driver].count += 1;
+               drivers[driver].cost += cost;
+            }
+        });
+
+        return {
+            byMethod: Object.values(methods).sort((a, b) => b.count - a.count),
+            byDriver: Object.values(drivers).sort((a, b) => b.count - a.count)
+        };
+    }, [orders]);
+
+    const forecastingData = useMemo(() => {
+        // Use allOrders to get better historical trend, filter last 30 days
+        const sorted = [...allOrders].sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
+        const daily: Record<string, number> = {};
+        
+        sorted.forEach(o => {
+            if (!o.Timestamp) return;
+            const date = new Date(o.Timestamp).toISOString().slice(0, 10);
+            daily[date] = (daily[date] || 0) + (Number(o['Grand Total']) || 0);
+        });
+
+        // Get last 14 days for visual chart
+        const labels = Object.keys(daily).slice(-14);
+        return labels.map(date => ({ label: date.slice(5), value: daily[date] }));
+    }, [allOrders]);
+
+
+    // --- HANDLERS ---
+    const handleAnalyze = async () => {
+        if (!geminiAi) return;
+        setLoadingAnalysis(true);
+        
+        if (reportType === 'forecasting') {
+            const result = await generateSalesForecast(geminiAi, allOrders);
+            setAnalysis(result);
+            setLoadingAnalysis(false);
+            return;
+        }
+
+        const reportPayload = {
+            revenue: summaryData.revenue,
+            profit: summaryData.profit,
+            totalOrders: summaryData.totalOrders,
+            aov: summaryData.aov,
+            byProduct: profitabilityData.slice(0, 5).map(p => ({ label: p.name, revenue: p.revenue })),
+            byPage: [], 
+            byUser: []
+        };
+
+        const result = await analyzeReportData(geminiAi, reportPayload, { reportType }); 
+        setAnalysis(result);
+        setLoadingAnalysis(false);
+    };
+
+    // --- RENDER CONTENT ---
+    const renderOverview = () => (
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="stat-card-new bg-blue-900/20 border-blue-500/30">
+                    <p className="text-gray-400 text-sm">Total Revenue</p>
+                    <p className="text-2xl font-bold text-blue-400">${summaryData.revenue.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                </div>
+                <div className="stat-card-new bg-green-900/20 border-green-500/30">
+                    <p className="text-gray-400 text-sm">Net Profit</p>
+                    <p className="text-2xl font-bold text-green-400">${summaryData.profit.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                </div>
+                <div className="stat-card-new bg-purple-900/20 border-purple-500/30">
+                    <p className="text-gray-400 text-sm">Total Orders</p>
+                    <p className="text-2xl font-bold text-purple-400">{summaryData.totalOrders}</p>
+                </div>
+                <div className="stat-card-new bg-yellow-900/20 border-yellow-500/30">
+                    <p className="text-gray-400 text-sm">Avg Order Value</p>
+                    <p className="text-2xl font-bold text-yellow-400">${summaryData.aov.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                </div>
             </div>
-            <div className="mt-2">
-                <p className="text-3xl font-bold text-white">{value}</p>
-                <div className="flex items-center text-sm mt-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 mr-1 ${changeColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">{ChangeIcon}</svg>
-                    <span className={`${changeColor} font-semibold`}>{change}</span>
-                    <span className="text-gray-500 ml-1">vs last period</span>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-96">
+                <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700 flex flex-col items-center justify-center">
+                     <SimpleBarChart 
+                        title="Top 5 Products by Revenue" 
+                        data={profitabilityData.slice(0, 5).map(p => ({ label: p.name.substring(0, 15) + '...', value: p.revenue }))} 
+                    />
+                </div>
+                <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
+                     <h3 className="text-lg font-bold text-white mb-4">AI Analysis</h3>
+                     {!analysis ? (
+                         <div className="h-full flex flex-col items-center justify-center text-center">
+                             <p className="text-gray-400 mb-4">Click below to generate insights about this data.</p>
+                             <GeminiButton onClick={handleAnalyze} isLoading={loadingAnalysis}>Analyze Overview</GeminiButton>
+                         </div>
+                     ) : (
+                         <div className="prose prose-invert prose-sm max-h-72 overflow-y-auto whitespace-pre-wrap">
+                             {analysis}
+                         </div>
+                     )}
                 </div>
             </div>
         </div>
     );
-};
 
+    const renderProfitability = () => {
+        const columns = [
+            { key: 'name', label: 'Product Name' },
+            { key: 'quantity', label: 'Qty Sold', render: (val: number) => val.toLocaleString() },
+            { key: 'revenue', label: 'Total Revenue', render: (val: number) => `$${val.toLocaleString(undefined, {minimumFractionDigits: 2})}` },
+            { key: 'cost', label: 'Total Cost', render: (val: number) => `$${val.toLocaleString(undefined, {minimumFractionDigits: 2})}` },
+            { key: 'profit', label: 'Net Profit', render: (val: number) => <span className={val >= 0 ? 'text-green-400' : 'text-red-400'}>${val.toLocaleString(undefined, {minimumFractionDigits: 2})}</span> },
+            { key: 'margin', label: 'Margin %', render: (val: number) => <span className={val >= 0 ? 'text-green-400' : 'text-red-400'}>{val.toFixed(1)}%</span> },
+        ];
 
-const ReportsView: React.FC<ReportsViewProps> = ({ orders: filteredOrders, allOrders, reportType }) => {
-    const { geminiAi, appData } = useContext(AppContext);
-    
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [analysisResult, setAnalysisResult] = useState('');
-    const [analysisError, setAnalysisError] = useState('');
+        return (
+            <div className="h-[600px]">
+                <DataTable 
+                    title="Product Profitability" 
+                    data={profitabilityData} 
+                    columns={columns} 
+                    visibleColumns={profitColumns}
+                    onColumnToggle={(key) => {
+                        const newSet = new Set(profitColumns);
+                        if (newSet.has(key)) newSet.delete(key); else newSet.add(key);
+                        setProfitColumns(newSet);
+                    }}
+                />
+            </div>
+        );
+    };
 
-    const reportData = useMemo(() => {
-        if (!Array.isArray(filteredOrders)) return null;
+    const renderShipping = () => {
+        const methodCols = [
+            { key: 'method', label: 'Method' },
+            { key: 'count', label: 'Orders' },
+            { key: 'cost', label: 'Total Cost ($)', render: (val: number) => `$${val.toFixed(2)}` }
+        ];
+        
+        return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[500px]">
+                <DataTable 
+                    title="Cost by Shipping Service" 
+                    data={shippingData.byMethod} 
+                    columns={methodCols}
+                    visibleColumns={new Set(['method', 'count', 'cost'])}
+                    onColumnToggle={() => {}}
+                />
+                <DataTable 
+                    title="Cost by Driver" 
+                    data={shippingData.byDriver.map(d => ({...d, method: d.driver}))} // Map driver to method key for reuse
+                    columns={[{ key: 'method', label: 'Driver' }, { key: 'count', label: 'Deliveries' }, { key: 'cost', label: 'Total Paid ($)', render: (val: number) => `$${val.toFixed(2)}` }]}
+                    visibleColumns={new Set(['method', 'count', 'cost'])}
+                    onColumnToggle={() => {}}
+                />
+            </div>
+        );
+    };
 
-        const revenue = filteredOrders.reduce((sum, o) => sum + (Number(o['Grand Total']) || 0), 0);
-        const totalProductCost = filteredOrders.reduce((sum, o) => sum + (Number(o['Total Product Cost ($)']) || 0), 0);
-        const totalInternalCost = filteredOrders.reduce((sum, o) => sum + (Number(o['Internal Cost']) || 0), 0);
-        const profit = revenue - totalProductCost - totalInternalCost;
-        const totalOrders = filteredOrders.length;
-        const aov = totalOrders > 0 ? revenue / totalOrders : 0;
-        const profitMargin = revenue > 0 ? (profit / revenue) * 100 : 0;
-
-        const aggregateBy = (key: 'Team' | 'User' | 'Page') => {
-            const aggregation = filteredOrders.reduce((acc, order) => {
-                // Use a fallback if the key is missing or empty
-                const group = (order[key] as string) || 'Unassigned';
-                
-                if (!acc[group]) {
-                    acc[group] = { revenue: 0, profit: 0, orders: 0, label: group };
-                }
-                acc[group].revenue += (Number(order['Grand Total']) || 0);
-                const orderProfit = (Number(order['Grand Total']) || 0) - (Number(order['Total Product Cost ($)']) || 0) - (Number(order['Internal Cost']) || 0);
-                acc[group].profit += orderProfit;
-                acc[group].orders += 1;
-                return acc;
-            }, {} as Record<string, { revenue: number, profit: number, orders: number, label: string }>);
-
-            return Object.values(aggregation).map((item: any) => ({
-                ...item,
-                revenueFormatted: `$${item.revenue.toFixed(2)}`,
-                profitFormatted: `$${item.profit.toFixed(2)}`,
-            })).sort((a, b) => b.revenue - a.revenue);
-        };
-
-        const byProduct = filteredOrders
-            .flatMap(order => {
-                const products = Array.isArray(order.Products) ? order.Products : [];
-                return products.map(p => ({ ...p, team: order.Team, user: order.User }));
-            })
-            .reduce((acc, product) => {
-                const masterProduct: MasterProduct | undefined = appData.products?.find((mp: MasterProduct) => mp.ProductName === product.name);
-                if (!acc[product.name]) {
-                    acc[product.name] = { revenue: 0, profit: 0, quantity: 0, label: product.name, image: masterProduct?.ImageURL || '' };
-                }
-                const total = Number(product.total) || 0;
-                acc[product.name].revenue += total;
-                const productProfit = total - ((Number(product.cost) || 0) * (Number(product.quantity) || 0));
-                acc[product.name].profit += productProfit;
-                acc[product.name].quantity += (Number(product.quantity) || 0);
-                return acc;
-            }, {} as Record<string, { revenue: number, profit: number, quantity: number, label: string, image: string }>);
+    const renderForecasting = () => (
+        <div className="space-y-6">
+            <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700 h-80 flex flex-col justify-center">
+                <SimpleLineChart data={forecastingData} title="Recent Daily Revenue Trend (14 Days)" />
+            </div>
             
-        const byShippingMethod = filteredOrders.reduce((acc, order) => {
-            const method = order['Internal Shipping Method'];
-            if (!method) return acc;
-            const methodInfo: ShippingMethod | undefined = appData.shippingMethods?.find((s: any) => s.MethodName === method);
-            if (!acc[method]) {
-                acc[method] = { label: method, cost: 0, orders: 0, logo: methodInfo?.LogosURL || '' };
-            }
-            acc[method].cost += (Number(order['Internal Cost']) || 0);
-            acc[method].orders += 1;
-            return acc;
-        }, {} as Record<string, { label: string, cost: number, orders: number, logo: string }>);
-
-        const byDriver = filteredOrders.reduce((acc, order) => {
-            const methodInfo = appData.shippingMethods?.find((s: any) => s.MethodName === order['Internal Shipping Method']);
-            if (!methodInfo || !methodInfo.RequireDriverSelection) return acc;
-            const driver = order['Internal Shipping Details'];
-            if (!driver) return acc;
-            if (!acc[driver]) {
-                acc[driver] = { label: driver, cost: 0, orders: 0, shippingService: order['Internal Shipping Method'] };
-            }
-            acc[driver].cost += (Number(order['Internal Cost']) || 0);
-            acc[driver].orders += 1;
-            return acc;
-        }, {} as Record<string, { label: string, cost: number, orders: number, shippingService: string }>);
-
-
-        return {
-            revenue,
-            profit,
-            totalOrders,
-            aov,
-            profitMargin,
-            byPage: aggregateBy('Page'),
-            byUser: aggregateBy('User'),
-            byProduct: Object.values(byProduct).map((item: any) => ({...item, revenueFormatted: `$${item.revenue.toFixed(2)}`, profitFormatted: `$${item.profit.toFixed(2)}`})).sort((a, b) => b.revenue - a.revenue),
-            byTeam: aggregateBy('Team'),
-            byShippingMethod: Object.values(byShippingMethod).map((item: any) => ({...item, costFormatted: `$${item.cost.toFixed(2)}`})).sort((a,b) => b.cost - a.cost),
-            byDriver: Object.values(byDriver).map((item: any) => ({...item, costFormatted: `$${item.cost.toFixed(2)}`})).sort((a,b) => b.cost - a.cost),
-        };
-    }, [filteredOrders, appData]);
-
-    const handleAnalyze = async () => {
-        if (!geminiAi) {
-            setAnalysisError("Gemini AI is not configured.");
-            return;
-        }
-        setIsAnalyzing(true);
-        setAnalysisResult('');
-        setAnalysisError('');
-        try {
-            const result = await analyzeReportData(geminiAi, reportData, {});
-            setAnalysisResult(result);
-        } catch (error) {
-            console.error(error);
-            setAnalysisError("Failed to get analysis from Gemini.");
-        } finally {
-            setIsAnalyzing(false);
-        }
-    };
-
-    const OverviewTab = () => {
-        if (!reportData) return <div>No Data</div>;
-        return (
-            <div className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                     <StatCardRedesigned title="Total Revenue" value={`$${reportData.revenue.toFixed(2)}`} change="+5.4%" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} />
-                    <StatCardRedesigned title="Net Profit" value={`$${reportData.profit.toFixed(2)}`} change="-2.1%" changeType="decrease" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>} />
-                    <StatCardRedesigned title="Total Orders" value={reportData.totalOrders.toString()} change="+12" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
-                    <StatCardRedesigned title="Avg. Order Value" value={`$${reportData.aov.toFixed(2)}`} change="+1.5%" changeType="increase" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4z" /></svg>} />
-                </div>
-
-                {geminiAi && (
-                    <div className="page-card !bg-gray-800/60 mt-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-                            <h3 className="text-lg font-bold text-white">Gemini AI Analysis</h3>
-                            <GeminiButton onClick={handleAnalyze} isLoading={isAnalyzing}>
-                                Generate Insights
-                            </GeminiButton>
+            <div className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 text-center">
+                <h3 className="text-xl font-bold text-white mb-4">✨ AI Sales Forecast</h3>
+                {!analysis ? (
+                    <div className="flex flex-col items-center">
+                        <p className="text-gray-400 mb-6 max-w-lg">
+                            Use Gemini AI to analyze your historical sales data and predict future trends, identify potential risks, and get actionable recommendations.
+                        </p>
+                        <GeminiButton onClick={handleAnalyze} isLoading={loadingAnalysis} className="px-8 py-3 text-lg">
+                            Generate Forecast
+                        </GeminiButton>
+                    </div>
+                ) : (
+                    <div className="text-left bg-gray-900/50 p-6 rounded-lg border border-gray-600">
+                        <div className="prose prose-invert max-w-none whitespace-pre-wrap leading-relaxed">
+                            {analysis}
                         </div>
-                        {isAnalyzing && <div className="flex justify-center"><Spinner /></div>}
-                        {analysisError && <p className="text-red-400">{analysisError}</p>}
-                        {analysisResult && (
-                            <div className="gemini-analysis whitespace-pre-wrap font-sans">
-                                {analysisResult}
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-        );
-    };
-
-    const PerformanceTab = () => {
-        if (!reportData) return null;
-        const top10Products = useMemo(() => {
-            return reportData.byProduct.slice(0, 10).map(p => {
-                const productInfo: MasterProduct | undefined = appData.products.find((master: MasterProduct) => master.ProductName === p.label);
-                return {
-                    label: p.label,
-                    value: p.revenue,
-                    imageUrl: productInfo?.ImageURL || ''
-                }
-            });
-        }, [reportData.byProduct, appData.products]);
-
-        const top10Users = useMemo(() => reportData.byUser.slice(0, 10).map(u => ({ label: u.label, value: u.revenue })), [reportData.byUser]);
-        const top10Pages = useMemo(() => reportData.byPage.slice(0, 10).map(p => ({ label: p.label, value: p.revenue })), [reportData.byPage]);
-
-        return (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="page-card !bg-gray-800/60"><SimpleBarChart data={top10Products} title="Top 10 Products by Revenue" /></div>
-                <div className="page-card !bg-gray-800/60"><SimpleBarChart data={top10Users} title="Top 10 Users by Revenue" /></div>
-                <div className="page-card !bg-gray-800/60 lg:col-span-2"><SimpleBarChart data={top10Pages} title="Top 10 Pages by Revenue" /></div>
-            </div>
-        );
-    };
-
-    const ProfitabilityTab = () => {
-        if (!reportData) return null;
-        const [profitView, setProfitView] = useState<ProfitView>('product');
-        const [visibleColumns, setVisibleColumns] = useState(new Set(['label', 'revenueFormatted', 'profitFormatted', 'orders', 'quantity', 'image']));
-        
-        const toggleColumn = (key: string) => {
-            setVisibleColumns(prev => {
-                const newSet = new Set(prev);
-                if (newSet.has(key)) {
-                    newSet.delete(key);
-                } else {
-                    newSet.add(key);
-                }
-                return newSet;
-            });
-        };
-
-        const profitViews = [
-            { id: 'product', label: 'By Product' },
-            { id: 'page', label: 'By Page' },
-            { id: 'team', label: 'By Team' }
-        ];
-        
-        const columns = {
-            product: [
-                { key: 'image', label: 'Image', render: (val: string) => <img src={convertGoogleDriveUrl(val)} className="h-10 w-10 object-cover rounded" /> },
-                { key: 'label', label: 'Product' }, { key: 'revenueFormatted', label: 'Revenue' },
-                { key: 'profitFormatted', label: 'Profit' }, { key: 'quantity', label: 'Quantity' },
-            ],
-            page: [
-                { key: 'label', label: 'Page' }, { key: 'revenueFormatted', label: 'Revenue' },
-                { key: 'profitFormatted', label: 'Profit' }, { key: 'orders', label: 'Orders' },
-            ],
-            team: [
-                { key: 'label', label: 'Team' }, { key: 'revenueFormatted', label: 'Revenue' },
-                { key: 'profitFormatted', label: 'Profit' }, { key: 'orders', label: 'Orders' },
-            ]
-        };
-
-        return (
-            <div className="space-y-4">
-                 <div className="flex items-center space-x-2 bg-gray-800/50 p-1 rounded-lg self-start">
-                    {profitViews.map(view => (
-                        <button
-                            key={view.id}
-                            onClick={() => setProfitView(view.id as ProfitView)}
-                            className={`flex-1 text-sm font-semibold py-2 px-4 rounded-md transition-colors ${profitView === view.id ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:bg-gray-700/50'}`}
-                        >
-                            {view.label}
+                        <button onClick={() => setAnalysis('')} className="mt-6 text-sm text-blue-400 hover:text-blue-300 underline">
+                            Clear Analysis
                         </button>
-                    ))}
-                </div>
-                
-                {profitView === 'product' && <DataTable title="Profit by Product" data={reportData.byProduct} columns={columns.product} visibleColumns={visibleColumns} onColumnToggle={toggleColumn} className="!bg-gray-800/60" />}
-                {profitView === 'page' && <DataTable title="Profit by Page" data={reportData.byPage} columns={columns.page} visibleColumns={visibleColumns} onColumnToggle={toggleColumn} className="!bg-gray-800/60" />}
-                {profitView === 'team' && <DataTable title="Profit by Team" data={reportData.byTeam} columns={columns.team} visibleColumns={visibleColumns} onColumnToggle={toggleColumn} className="!bg-gray-800/60" />}
-            </div>
-        );
-    };
-
-    const ForecastingTab = () => {
-        const [isForecasting, setIsForecasting] = useState(false);
-        const [forecastResult, setForecastResult] = useState('');
-        const [forecastError, setForecastError] = useState('');
-
-        const handleForecast = async () => {
-             if (!geminiAi) {
-                setForecastError("Gemini AI is not configured.");
-                return;
-            }
-            setIsForecasting(true);
-            setForecastResult('');
-            setForecastError('');
-            try {
-                const result = await generateSalesForecast(geminiAi, allOrders);
-                setForecastResult(result);
-            } catch (error) {
-                console.error(error);
-                setForecastError("Failed to get forecast from Gemini.");
-            } finally {
-                setIsForecasting(false);
-            }
-        }
-        return (
-            <div className="page-card !bg-gray-800/60">
-                <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-                    <h3 className="text-lg font-bold text-white">Gemini Sales Forecast</h3>
-                    <GeminiButton onClick={handleForecast} isLoading={isForecasting}>
-                        Generate Forecast
-                    </GeminiButton>
-                </div>
-                 {isForecasting && <div className="flex justify-center"><Spinner /></div>}
-                 {forecastError && <p className="text-red-400">{forecastError}</p>}
-                 {forecastResult && (
-                    <div className="gemini-analysis whitespace-pre-wrap font-sans">
-                        {forecastResult}
                     </div>
                 )}
-                 {!forecastResult && !isForecasting && (
-                     <p className="text-gray-400 text-center py-8">Click the button to generate a sales forecast based on historical order data.</p>
-                 )}
             </div>
-        );
-    };
-    
-    const ShippingTab = () => {
-        if (!reportData) return null;
-        const [shippingView, setShippingView] = useState<ShippingCostView>('service');
-        const [visibleServiceCols, setVisibleServiceCols] = useState(new Set(['logo', 'label', 'costFormatted', 'orders']));
-        const [visibleDriverCols, setVisibleDriverCols] = useState(new Set(['label', 'shippingService', 'costFormatted', 'orders']));
+        </div>
+    );
 
-        const toggleServiceCol = (key: string) => setVisibleServiceCols(prev => {
-            const newSet = new Set(prev);
-            newSet.has(key) ? newSet.delete(key) : newSet.add(key);
-            return newSet;
-        });
-        const toggleDriverCol = (key: string) => setVisibleDriverCols(prev => {
-            const newSet = new Set(prev);
-            newSet.has(key) ? newSet.delete(key) : newSet.add(key);
-            return newSet;
-        });
-
-        const serviceColumns = [
-            { key: 'logo', label: 'Logo', render: (val: string) => <img src={convertGoogleDriveUrl(val)} className="h-8 w-12 object-contain bg-white/10 p-1 rounded" /> },
-            { key: 'label', label: 'Service' },
-            { key: 'costFormatted', label: 'Total Cost' },
-            { key: 'orders', label: 'Orders' },
-        ];
-        const driverColumns = [
-            { key: 'label', label: 'Driver' },
-            { key: 'shippingService', label: 'Shipping Service' },
-            { key: 'costFormatted', label: 'Total Cost' },
-            { key: 'orders', label: 'Orders' },
-        ];
-
-        return (
-            <div className="space-y-4">
-                <div className="flex items-center space-x-2 bg-gray-800/50 p-1 rounded-lg self-start">
-                    <button onClick={() => setShippingView('service')} className={`flex-1 text-sm font-semibold py-2 px-4 rounded-md transition-colors ${shippingView === 'service' ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:bg-gray-700/50'}`}>
-                        By Shipping Service
-                    </button>
-                    <button onClick={() => setShippingView('driver')} className={`flex-1 text-sm font-semibold py-2 px-4 rounded-md transition-colors ${shippingView === 'driver' ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:bg-gray-700/50'}`}>
-                        By Driver
-                    </button>
-                </div>
-                {shippingView === 'service' && <DataTable title="Costs by Shipping Service" data={reportData.byShippingMethod} columns={serviceColumns} visibleColumns={visibleServiceCols} onColumnToggle={toggleServiceCol} className="!bg-gray-800/60" />}
-                {shippingView === 'driver' && <DataTable title="Costs by Driver" data={reportData.byDriver} columns={driverColumns} visibleColumns={visibleDriverCols} onColumnToggle={toggleDriverCol} className="!bg-gray-800/60" />}
-            </div>
-        );
-    };
-
-    switch (reportType) {
-        case 'overview': return <OverviewTab />;
-        case 'performance': return <PerformanceTab />;
-        case 'profitability': return <ProfitabilityTab />;
-        case 'forecasting': return <ForecastingTab />;
-        case 'shipping': return <ShippingTab />;
-        default: return null;
-    }
+    return (
+        <div className="h-full">
+            {reportType === 'overview' && renderOverview()}
+            {reportType === 'profitability' && renderProfitability()}
+            {reportType === 'shipping' && renderShipping()}
+            {reportType === 'forecasting' && renderForecasting()}
+            {reportType === 'performance' && <div className="text-center text-gray-500 mt-10">Performance metrics are available in the main dashboard view.</div>}
+        </div>
+    );
 };
 
 export default ReportsView;
