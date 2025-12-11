@@ -1,5 +1,6 @@
+
 import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
-import { AppContext } from '../App';
+import { AppContext } from '../context/AppContext';
 import Spinner from '../components/common/Spinner';
 import Modal from '../components/common/Modal';
 import { WEB_APP_URL } from '../constants';
@@ -427,7 +428,7 @@ const ConfigEditModal = ({ section, item, onClose, onSave }: { section: ConfigSe
     );
 }
 
-const SettingsContent = ({ initialSection }: { initialSection?: string }) => {
+const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ onBack, initialSection }) => {
     const { appData, refreshData, setAppState } = useContext(AppContext);
     const [desktopSelectedSectionId, setDesktopSelectedSectionId] = useState<string>(initialSection || 'users');
     const [mobileSelectedSectionId, setMobileSelectedSectionId] = useState<string | null>(initialSection || null);
@@ -646,6 +647,12 @@ const SettingsContent = ({ initialSection }: { initialSection?: string }) => {
     if (isMobile && !mobileSelectedSectionId) {
         return (
             <div className="md:hidden space-y-3 animate-fade-in">
+                 <div className="flex justify-between items-center mb-4 px-1">
+                    <h2 className="text-xl font-bold text-white">ការកំណត់ (Settings)</h2>
+                    <button onClick={onBack} className="btn btn-secondary !py-1 !px-3 text-sm">
+                        ត្រឡប់
+                    </button>
+                </div>
                 {configSections.map(section => (
                     <button key={section.id} onClick={() => setMobileSelectedSectionId(section.id)} className="settings-list-item">
                         <div className="flex items-center">
@@ -661,88 +668,100 @@ const SettingsContent = ({ initialSection }: { initialSection?: string }) => {
 
     // DESKTOP VIEW
     return (
-        <div className="hidden md:flex gap-6 animate-fade-in h-[calc(100vh-12rem)]">
-            <div className="w-72 flex-shrink-0 bg-gray-800/50 rounded-lg p-4">
-                <nav className="flex flex-col space-y-2">
-                    {configSections.map(section => (
-                        <a 
-                            href="#" 
-                            key={section.id}
-                            onClick={(e) => { e.preventDefault(); setDesktopSelectedSectionId(section.id); }}
-                            className={`flex items-center p-3 rounded-md transition-colors ${desktopSelectedSectionId === section.id ? 'bg-blue-600 text-white font-semibold' : 'hover:bg-gray-700'}`}
-                        >
-                            <span className="mr-3 text-lg">{section.icon}</span>
-                            <span>{section.title}</span>
-                        </a>
-                    ))}
-                </nav>
+        <div className="hidden md:flex flex-col h-full animate-fade-in">
+             <div className="flex justify-between items-center mb-6">
+                <h1 className="text-2xl md:text-3xl font-bold text-white">ការកំណត់ (Settings)</h1>
+                <button onClick={onBack} className="btn btn-secondary flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    <span className="hidden sm:inline">ត្រឡប់ទៅផ្ទាំង Admin</span>
+                </button>
             </div>
-            
-            <div className="flex-grow flex flex-col page-card">
-               {activeSection && (
-                    <div key={activeSection.id} className="flex flex-col h-full">
-                        <div className="flex justify-between items-center mb-4 flex-shrink-0">
-                            <h3 className="text-2xl font-bold text-white">{activeSection.title}</h3>
-                            <div className="flex space-x-2">
-                                {activeSection.id === 'pages' && (
-                                    <button onClick={handleOpenPdfModal} className="btn btn-secondary text-sm flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
-                                        </svg>
-                                        Export PDF
-                                    </button>
-                                )}
-                                <button onClick={() => openModal(activeSection.id, null)} className="btn btn-primary text-sm">បន្ថែមថ្មី</button>
+
+            <div className="flex gap-6 h-[calc(100vh-12rem)]">
+                <div className="w-72 flex-shrink-0 bg-gray-800/50 rounded-lg p-4">
+                    <nav className="flex flex-col space-y-2">
+                        {configSections.map(section => (
+                            <a 
+                                href="#" 
+                                key={section.id}
+                                onClick={(e) => { e.preventDefault(); setDesktopSelectedSectionId(section.id); }}
+                                className={`flex items-center p-3 rounded-md transition-colors ${desktopSelectedSectionId === section.id ? 'bg-blue-600 text-white font-semibold' : 'hover:bg-gray-700'}`}
+                            >
+                                <span className="mr-3 text-lg">{section.icon}</span>
+                                <span>{section.title}</span>
+                            </a>
+                        ))}
+                    </nav>
+                </div>
+                
+                <div className="flex-grow flex flex-col page-card">
+                   {activeSection && (
+                        <div key={activeSection.id} className="flex flex-col h-full">
+                            <div className="flex justify-between items-center mb-4 flex-shrink-0">
+                                <h3 className="text-2xl font-bold text-white">{activeSection.title}</h3>
+                                <div className="flex space-x-2">
+                                    {activeSection.id === 'pages' && (
+                                        <button onClick={handleOpenPdfModal} className="btn btn-secondary text-sm flex items-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
+                                            </svg>
+                                            Export PDF
+                                        </button>
+                                    )}
+                                    <button onClick={() => openModal(activeSection.id, null)} className="btn btn-primary text-sm">បន្ថែមថ្មី</button>
+                                </div>
+                            </div>
+                            <div className="flex-grow overflow-auto">
+                                <table className="admin-table w-full">
+                                    <thead>
+                                        <tr>
+                                            {activeSection.fields.map(field => <th key={field.name}>{field.label}</th>)}
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {dataForSection.length > 0 ? (
+                                            dataForSection.map((item: any, index: number) => {
+                                                if (!item || typeof item !== 'object') return null;
+                                                return (
+                                                    <tr key={index} className="hover:bg-gray-700/30 transition-colors">
+                                                        {activeSection.fields.map(field => <td key={field.name} className="truncate max-w-xs px-4 py-3 border-b border-gray-700">{getDisplayValue(item, field)}</td>)}
+                                                        <td className="w-24 px-4 py-3 border-b border-gray-700">
+                                                            <div className="flex space-x-2">
+                                                                <button onClick={() => openModal(activeSection.id, item)} className="action-btn text-yellow-400 hover:text-yellow-300 p-1 transition-transform hover:scale-110" aria-label={`Edit`}>
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                                </button>
+                                                                <button onClick={() => handleDelete(activeSection, item)} className="action-btn text-red-400 hover:text-red-300 p-1 transition-transform hover:scale-110" aria-label={`Delete`}>
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={activeSection.fields.length + 1} className="text-center p-12 text-gray-400">
+                                                    <div className="flex flex-col items-center justify-center opacity-60">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                                                        </svg>
+                                                        <p className="text-lg font-medium">មិនមានទិន្នន័យ (No Data)</p>
+                                                        <p className="text-sm mt-2 max-w-xs">
+                                                            There are no items in this list yet. Click "បន្ថែមថ្មី" (Add New) to create one.
+                                                        </p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                        <div className="flex-grow overflow-auto">
-                            <table className="admin-table w-full">
-                                <thead>
-                                    <tr>
-                                        {activeSection.fields.map(field => <th key={field.name}>{field.label}</th>)}
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {dataForSection.length > 0 ? (
-                                        dataForSection.map((item: any, index: number) => {
-                                            if (!item || typeof item !== 'object') return null;
-                                            return (
-                                                <tr key={index} className="hover:bg-gray-700/30 transition-colors">
-                                                    {activeSection.fields.map(field => <td key={field.name} className="truncate max-w-xs px-4 py-3 border-b border-gray-700">{getDisplayValue(item, field)}</td>)}
-                                                    <td className="w-24 px-4 py-3 border-b border-gray-700">
-                                                        <div className="flex space-x-2">
-                                                            <button onClick={() => openModal(activeSection.id, item)} className="action-btn text-yellow-400 hover:text-yellow-300 p-1 transition-transform hover:scale-110" aria-label={`Edit`}>
-                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                                            </button>
-                                                            <button onClick={() => handleDelete(activeSection, item)} className="action-btn text-red-400 hover:text-red-300 p-1 transition-transform hover:scale-110" aria-label={`Delete`}>
-                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })
-                                    ) : (
-                                        <tr>
-                                            <td colSpan={activeSection.fields.length + 1} className="text-center p-12 text-gray-400">
-                                                <div className="flex flex-col items-center justify-center opacity-60">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                                                    </svg>
-                                                    <p className="text-lg font-medium">មិនមានទិន្នន័យ (No Data)</p>
-                                                    <p className="text-sm mt-2 max-w-xs">
-                                                        There are no items in this list yet. Click "បន្ថែមថ្មី" (Add New) to create one.
-                                                    </p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-               )}
+                   )}
+                </div>
             </div>
 
             {modalState.isOpen && activeSection &&
@@ -763,32 +782,6 @@ const SettingsContent = ({ initialSection }: { initialSection?: string }) => {
             )}
         </div>
     ); 
-};
-
-
-const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ onBack, initialSection }) => {
-    return (
-        <div className="w-full h-full min-h-[calc(100vh-6rem)] max-w-7xl mx-auto p-2 sm:p-4 lg:p-6 animate-fade-in">
-             <style>{`.animate-fade-in { animation: fadeIn 0.5s ease-in-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl md:text-3xl font-bold text-white">ផ្ទាំងគ្រប់គ្រង</h1>
-                <button onClick={onBack} className="btn btn-secondary flex items-center md:hidden">
-                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                </button>
-                 <button onClick={onBack} className="btn btn-secondary hidden md:flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    ត្រឡប់ទៅផ្ទាំង Admin
-                </button>
-            </div>
-            
-            
-            <SettingsContent initialSection={initialSection} />
-
-        </div>
-    );
 };
 
 
