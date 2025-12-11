@@ -1,5 +1,6 @@
+
 import React, { useState, useContext, useEffect } from 'react';
-import { AppContext } from '../App';
+import { AppContext } from '../context/AppContext';
 import Spinner from '../components/common/Spinner';
 import { WEB_APP_URL } from '../constants';
 import { User } from '../types';
