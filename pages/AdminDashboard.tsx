@@ -1,18 +1,21 @@
-import React, { useState, useContext, useEffect } from 'react';
-import { AppContext } from '../App';
+
+import React, { useState, useContext, useEffect, useMemo } from 'react';
+import { AppContext } from '../context/AppContext';
 import Spinner from '../components/common/Spinner';
 import BottomNavBar from '../components/admin/BottomNavBar';
 import PerformanceTrackingPage from './PerformanceTrackingPage';
 import ReportDashboard from './ReportDashboard';
 import SettingsDashboard from './SettingsDashboard';
 import OrdersDashboard from './OrdersDashboard';
+import SalesByTeamPage from './SalesByTeamPage';
+import SalesByPageReport from './SalesByPageReport'; // Import the new page
 import { useUrlState } from '../hooks/useUrlState';
 import { WEB_APP_URL } from '../constants';
-import { FullOrder } from '../types';
+import { FullOrder, ParsedOrder } from '../types';
 
 
 type AdminView = 'dashboard' | 'performance';
-type ActiveDashboard = 'admin' | 'orders' | 'reports' | 'settings';
+type ActiveDashboard = 'admin' | 'orders' | 'reports' | 'settings' | 'sales_team' | 'sales_page'; // Added sales_page
 
 const AdminDashboard: React.FC = () => {
     const { appData, currentUser } = useContext(AppContext);
@@ -20,7 +23,7 @@ const AdminDashboard: React.FC = () => {
     // Use URL state for navigation
     const [activeDashboard, setActiveDashboard] = useUrlState<ActiveDashboard>('tab', 'admin');
     const [currentAdminView, setCurrentAdminView] = useUrlState<AdminView>('subview', 'dashboard');
-    const [settingsSection, setSettingsSection] = useUrlState<string>('settingsSection', ''); // To deep link into settings
+    const [settingsSection, setSettingsSection] = useUrlState<string>('settingsSection', ''); 
     
     const [initialReportType, setInitialReportType] = useState<any>('overview');
     
@@ -32,68 +35,77 @@ const AdminDashboard: React.FC = () => {
         loading: false
     });
 
-    // Dedicated state for user count to handle cases where appData.users might be empty
     const [realUserCount, setRealUserCount] = useState(0);
+    // State to hold parsed orders for passing to sub-pages
+    const [parsedOrders, setParsedOrders] = useState<ParsedOrder[]>([]);
     
-    // Check if appData is truly empty (ignoring initial empty arrays)
+    // NEW: State for Revenue Breakdown Table Toggle
+    const [revenueBreakdownPeriod, setRevenueBreakdownPeriod] = useState<'today' | 'this_month'>('this_month');
+
+    
     const appDataLoading = !appData;
 
-    // Fetch real-time orders data when on dashboard view
+    // Combined fetch for metrics and full order list (optimization)
     useEffect(() => {
-        if (activeDashboard === 'admin' && currentAdminView === 'dashboard') {
-            const fetchMetrics = async () => {
-                setDashboardMetrics(prev => ({ ...prev, loading: true }));
-                try {
-                    const response = await fetch(`${WEB_APP_URL}/api/admin/all-orders`);
-                    if (response.ok) {
-                        const result = await response.json();
-                        if (result.status === 'success') {
-                            // SAFEGUARD: Ensure result.data is an array and filter out nulls
-                            const orders: FullOrder[] = Array.isArray(result.data) ? result.data.filter((o: any) => o !== null) : [];
-                            
-                            // Correct "Today" Calculation:
-                            // We construct a local "YYYY-MM-DD" string for comparison.
-                            const now = new Date();
-                            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                            
-                            const todayOrdersList = orders.filter(o => {
-                                if (!o || !o.Timestamp) return false;
-                                const orderDate = new Date(o.Timestamp);
-                                const orderDateStr = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
-                                return orderDateStr === todayStr;
-                            });
+        const fetchOrders = async () => {
+            setDashboardMetrics(prev => ({ ...prev, loading: true }));
+            try {
+                const response = await fetch(`${WEB_APP_URL}/api/admin/all-orders`);
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.status === 'success') {
+                        const rawOrders: FullOrder[] = Array.isArray(result.data) ? result.data.filter((o: any) => o !== null) : [];
+                        
+                        // Parse orders immediately for use in sub-pages like SalesByTeamPage
+                        const parsed = rawOrders.map(o => {
+                            let products = [];
+                            try {
+                                if (o['Products (JSON)'] && typeof o['Products (JSON)'] === 'string') {
+                                    products = JSON.parse(o['Products (JSON)']);
+                                }
+                            } catch(e) { 
+                                console.error("Failed to parse products JSON", e);
+                            }
+                            return { ...o, Products: products };
+                        });
+                        setParsedOrders(parsed);
 
-                            const revenue = todayOrdersList.reduce((sum, o) => sum + (Number(o['Grand Total']) || 0), 0);
-                            const pending = orders.filter(o => o && o['Payment Status'] === 'Unpaid').length;
+                        // Metrics Calculation
+                        const today = new Date();
+                        const todayStr = today.toISOString().slice(0, 10);
+                        
+                        const todayOrdersList = rawOrders.filter(o => o && o.Timestamp && o.Timestamp.startsWith(todayStr));
+                        const revenue = todayOrdersList.reduce((sum, o) => sum + (Number(o['Grand Total']) || 0), 0);
+                        const pending = rawOrders.filter(o => o && o['Payment Status'] === 'Unpaid').length;
 
-                            setDashboardMetrics({
-                                todayRevenue: revenue,
-                                todayOrders: todayOrdersList.length,
-                                pendingOrders: pending,
-                                loading: false
-                            });
-                        }
+                        setDashboardMetrics({
+                            todayRevenue: revenue,
+                            todayOrders: todayOrdersList.length,
+                            pendingOrders: pending,
+                            loading: false
+                        });
                     }
-                } catch (e) {
-                    console.error("Failed to fetch dashboard metrics", e);
-                } finally {
-                    setDashboardMetrics(prev => ({ ...prev, loading: false }));
                 }
-            };
-            fetchMetrics();
+            } catch (e) {
+                console.error("Failed to fetch orders", e);
+            } finally {
+                setDashboardMetrics(prev => ({ ...prev, loading: false }));
+            }
+        };
+
+        // Fetch if on dashboard OR if we switched to a tab that needs orders (like sales_team) but haven't fetched yet
+        if (activeDashboard === 'admin' || ((activeDashboard === 'sales_team' || activeDashboard === 'sales_page') && parsedOrders.length === 0)) {
+            fetchOrders();
         }
-    }, [activeDashboard, currentAdminView]);
+    }, [activeDashboard]); // Depend on activeDashboard to trigger fetch if needed
 
     // Robust fetch for user count
     useEffect(() => {
         const fetchUserCount = async () => {
-            // If appData has users, use that
             if (appData.users && appData.users.length > 0) {
                 setRealUserCount(appData.users.length);
                 return;
             }
-
-            // Fallback: Fetch from API specifically
             try {
                 const response = await fetch(`${WEB_APP_URL}/api/users`);
                 if (response.ok) {
@@ -112,12 +124,50 @@ const AdminDashboard: React.FC = () => {
         }
     }, [activeDashboard, appData.users]);
 
+    // Calculate Team Revenue Stats for the Dashboard Table with Date Filter
+    const teamRevenueStats = useMemo(() => {
+        const stats: Record<string, { name: string, revenue: number, orders: number }> = {};
+        
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        parsedOrders.forEach(order => {
+            // 1. Date Filter Logic
+            if (!order.Timestamp) return;
+            const orderDate = new Date(order.Timestamp);
+            
+            if (revenueBreakdownPeriod === 'today') {
+                if (orderDate < startOfToday) return;
+            } else if (revenueBreakdownPeriod === 'this_month') {
+                if (orderDate < startOfMonth) return;
+            }
+
+            // 2. Team Logic
+            let teamName = order.Team;
+            if (!teamName && order.User) {
+                const user = appData.users?.find(u => u.UserName === order.User);
+                if (user && user.Team) {
+                    teamName = user.Team.split(',')[0].trim();
+                }
+            }
+            teamName = teamName || 'Unassigned';
+
+            // 3. Aggregate
+            if (!stats[teamName]) {
+                stats[teamName] = { name: teamName, revenue: 0, orders: 0 };
+            }
+            stats[teamName].revenue += (Number(order['Grand Total']) || 0);
+            stats[teamName].orders += 1;
+        });
+        return Object.values(stats).sort((a, b) => b.revenue - a.revenue);
+    }, [parsedOrders, appData.users, revenueBreakdownPeriod]);
+
     const handleNavChange = (dashboard: ActiveDashboard) => {
         if (dashboard === 'reports') {
             setInitialReportType('overview');
         }
         setActiveDashboard(dashboard);
-        // If switching back to the main admin panel, reset its view to the dashboard
         if (dashboard === 'admin') {
             setCurrentAdminView('dashboard');
         }
@@ -136,6 +186,8 @@ const AdminDashboard: React.FC = () => {
     
      const navConfig = {
         dashboard: { label: 'ទិន្នន័យសង្ខេប', icon: viewConfig.dashboard.icon, component: 'admin' },
+        sales_team: { label: 'Sales Team', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, component: 'sales_team' },
+        sales_page: { label: 'Sales Page', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>, component: 'sales_page' }, // Added
         orders: { label: 'ប្រតិបត្តិការណ៍', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002 2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>, component: 'orders' },
         reports: { 
             label: 'របាយការណ៍', 
@@ -163,7 +215,6 @@ const AdminDashboard: React.FC = () => {
          const DashboardView = () => {
             const safeLength = (data: any) => (Array.isArray(data) ? data.length : 0);
             
-            // Business Metrics (Top Row)
             const businessStats = [
                 {
                     label: 'ចំណូលថ្ងៃនេះ',
@@ -194,9 +245,6 @@ const AdminDashboard: React.FC = () => {
                 }
             ];
 
-            // System Entities (Bottom Grid)
-            // Note: Users uses realUserCount to be more accurate
-            // SAFEGUARD: Added fallback arrays [] and optional chaining map to prevent crashes if appData props are missing or null
             const entityStats = [
                 { id: 'users', label: 'អ្នកប្រើប្រាស់ (Users)', value: realUserCount, icon: '👤', color: 'text-purple-400' },
                 { id: 'pages', label: 'ក្រុម (Teams)', value: safeLength((appData.pages || []).map((p: any) => p?.Team).filter((v: any, i: any, a: any) => v && a.indexOf(v) === i)), icon: '👥', color: 'text-pink-400' },
@@ -207,7 +255,6 @@ const AdminDashboard: React.FC = () => {
 
             return (
                 <div className="space-y-8 animate-fade-in">
-                    {/* Welcome Section */}
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
                         <div>
                             <h2 className="text-2xl font-bold text-white">សួស្តី, {currentUser?.FullName} 👋</h2>
@@ -215,7 +262,6 @@ const AdminDashboard: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Business Metrics Row */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {businessStats.map((stat, idx) => (
                             <div key={idx} className={`relative overflow-hidden rounded-2xl p-6 border ${stat.border} bg-gradient-to-br ${stat.color} backdrop-blur-md transition-all hover:scale-[1.02] shadow-lg`}>
@@ -232,17 +278,91 @@ const AdminDashboard: React.FC = () => {
                                         {stat.icon}
                                     </div>
                                 </div>
-                                {/* Decorative circle */}
                                 <div className={`absolute -bottom-4 -right-4 w-24 h-24 rounded-full bg-white/5 blur-xl`}></div>
                             </div>
                         ))}
                     </div>
 
-                    {/* System Entities Grid */}
+                    {/* Team Revenue Breakdown Table */}
+                    <div className="mt-8">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                            <h3 className="text-lg font-bold text-white flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" />
+                                    <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
+                                </svg>
+                                ចំណូលសរុបតាមក្រុម (Revenue Breakdown)
+                            </h3>
+                            
+                            <div className="flex bg-gray-800 p-1 rounded-lg border border-gray-700">
+                                <button 
+                                    onClick={() => setRevenueBreakdownPeriod('today')}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${revenueBreakdownPeriod === 'today' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    ថ្ងៃនេះ (Today)
+                                </button>
+                                <button 
+                                    onClick={() => setRevenueBreakdownPeriod('this_month')}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${revenueBreakdownPeriod === 'this_month' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    ខែនេះ (This Month)
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden shadow-lg">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs text-gray-400 uppercase bg-gray-900/50 border-b border-gray-700">
+                                        <tr>
+                                            <th className="px-6 py-3">Team Name</th>
+                                            <th className="px-6 py-3 text-center">Orders ({revenueBreakdownPeriod === 'today' ? 'Today' : 'Month'})</th>
+                                            <th className="px-6 py-3 text-right">Revenue ({revenueBreakdownPeriod === 'today' ? 'Today' : 'Month'})</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-700">
+                                        {teamRevenueStats.map((team, idx) => (
+                                            <tr key={team.name} className="hover:bg-gray-700/30 transition-colors">
+                                                <td className="px-6 py-4 font-medium text-white flex items-center gap-2">
+                                                    <span className="w-6 h-6 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center text-xs border border-blue-500/30">
+                                                        {idx + 1}
+                                                    </span>
+                                                    {team.name}
+                                                </td>
+                                                <td className="px-6 py-4 text-center text-gray-300">{team.orders}</td>
+                                                <td className="px-6 py-4 text-right text-green-400 font-bold tracking-wide">
+                                                    ${team.revenue.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {teamRevenueStats.length === 0 && (
+                                            <tr>
+                                                <td colSpan={3} className="px-6 py-8 text-center text-gray-500">No data available for {revenueBreakdownPeriod === 'today' ? 'today' : 'this month'}</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                    {teamRevenueStats.length > 0 && (
+                                        <tfoot className="bg-gray-900/80 font-bold text-white">
+                                            <tr>
+                                                <td className="px-6 py-4">Total</td>
+                                                <td className="px-6 py-4 text-center">
+                                                    {teamRevenueStats.reduce((sum, t) => sum + t.orders, 0)}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-green-400">
+                                                    ${teamRevenueStats.reduce((sum, t) => sum + t.revenue, 0).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    )}
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                     <div>
                         <h3 className="text-lg font-bold text-white mb-4 flex items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287-.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
                             </svg>
                             ការគ្រប់គ្រងប្រព័ន្ធ (System Management)
                         </h3>
@@ -277,6 +397,8 @@ const AdminDashboard: React.FC = () => {
 
         const sidebarNavItems = [
             { id: 'dashboard', label: 'ទិន្នន័យសង្ខេប', icon: viewConfig.dashboard.icon, component: 'admin' },
+            { id: 'sales_team', label: 'Sales Team Report', icon: navConfig.sales_team.icon, component: 'sales_team' },
+            { id: 'sales_page', label: 'Sales Page Report', icon: navConfig.sales_page.icon, component: 'sales_page' }, // Added to sidebar
             { id: 'orders', label: 'ប្រតិបត្តិការណ៍', icon: navConfig.orders.icon, component: 'orders' },
             { id: 'reports', label: 'របាយការណ៍', icon: navConfig.reports.icon, component: 'reports' },
             { id: 'performance', label: 'សមិទ្ធផល', icon: viewConfig.performance.icon, component: 'admin' },
@@ -308,7 +430,8 @@ const AdminDashboard: React.FC = () => {
                 <main className="flex-1 p-2 sm:p-4 lg:p-6 overflow-y-auto pb-20 md:pb-6">
                      <div className="flex justify-between items-center mb-6 md:hidden">
                         <h1 className="text-2xl font-bold text-white">
-                            {viewConfig[currentAdminView].label}
+                            {viewConfig[currentAdminView] ? viewConfig[currentAdminView].label : 
+                             activeDashboard === 'sales_page' ? 'Sales Page Report' : 'Sales Team Report'}
                         </h1>
                     </div>
                     {renderAdminContent()}
@@ -326,6 +449,10 @@ const AdminDashboard: React.FC = () => {
     switch (activeDashboard) {
         case 'admin':
             return <AdminDashboardContent />;
+        case 'sales_team':
+            return <SalesByTeamPage orders={parsedOrders} onBack={handleBackToAdmin} />;
+        case 'sales_page':
+            return <SalesByPageReport orders={parsedOrders} onBack={handleBackToAdmin} />;
         case 'orders':
             return <OrdersDashboard onBack={handleBackToAdmin} />;
         case 'reports':
