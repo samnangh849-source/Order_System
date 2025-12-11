@@ -1,7 +1,8 @@
+
 import React, { useState, useRef, useEffect, useMemo, useContext, useCallback } from 'react';
 import { MasterProduct } from '../../types';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
-import { AppContext } from '../../App';
+import { AppContext } from '../../context/AppContext';
 import { WEB_APP_URL } from '../../constants';
 import Spinner from './Spinner';
 import Modal from './Modal';
