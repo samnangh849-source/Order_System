@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo, useContext, useEffect } from 'react';
 import { ParsedOrder } from '../../types';
-import { AppContext } from '../../App';
+import { AppContext } from '../../context/AppContext';
 import { LABEL_PRINTER_URL_BASE } from '../../constants';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
 
@@ -159,7 +160,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
         
         if (showActions) {
             columns.push({ key: 'actions', label: 'Actions', render: (row: ParsedOrder) => (
-                <button onClick={(e) => { e.stopPropagation(); onEdit && onEdit(row); }} className="action-btn text-yellow-400 hover:text-yellow-600 p-1 text-base" title="Edit Order">✏️ កែសម្រួល</button>
+                <button onClick={(e) => { e.stopPropagation(); onEdit && showActions && onEdit(row); }} className="action-btn text-yellow-400 hover:text-yellow-600 p-1 text-base" title="Edit Order">✏️ កែសម្រួល</button>
             )});
         }
 
@@ -231,5 +232,6 @@ const OrdersList: React.FC<OrdersListProps> = ({ orders, onEdit, showActions }) 
         </div>
     );
 };
+
 
 export default OrdersList;

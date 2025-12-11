@@ -1,6 +1,6 @@
 
 import React, { useState, useContext, useEffect, useMemo } from 'react';
-import { AppContext } from '../App';
+import { AppContext } from '../context/AppContext';
 import Spinner from '../components/common/Spinner';
 import { FullOrder, ParsedOrder, MasterProduct, ShippingMethod, Driver, BankAccount, User } from '../types';
 import EditOrderPage from './EditOrderPage';
