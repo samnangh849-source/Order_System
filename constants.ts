@@ -13,5 +13,5 @@ export const LABEL_PRINTER_URL_BASE = "https://samnangh849-source.github.io/Butt
 
 // Background Music URL (MP3)
 // អ្នកអាចដាក់ Link ពី Google Drive (Anyone with the link) ឬ Direct URL ផ្សេងទៀតនៅទីនេះ
-export const BACKGROUND_MUSIC_URL = "music/Artlist Musical Logos - SEVEN WONDERS 2.mp3";
+export const BACKGROUND_MUSIC_URL = "/music/1.mp3";
 

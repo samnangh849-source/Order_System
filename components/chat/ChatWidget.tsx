@@ -46,6 +46,10 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         }
     });
 
+    // Local state for users to ensure we have the list even if appData is restricted
+    const [allUsers, setAllUsers] = useState<User[]>(appData.users || []);
+    const [isUsersLoading, setIsUsersLoading] = useState(false);
+
     const [newMessage, setNewMessage] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const [isMuted, setIsMuted] = useState(() => localStorage.getItem('chatMuted') === 'true');
@@ -73,6 +77,32 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     const currentUserRef = useRef(currentUser);
     currentUserRef.current = currentUser;
     
+    // Fetch users explicitly for chat to ensure we have avatars/names
+    useEffect(() => {
+        const fetchUsers = async () => {
+            setIsUsersLoading(true);
+            try {
+                const response = await fetch(`${WEB_APP_URL}/api/users`);
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.status === 'success' && Array.isArray(result.data)) {
+                        setAllUsers(result.data);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch users for chat", e);
+            } finally {
+                setIsUsersLoading(false);
+            }
+        };
+
+        if (isOpen && allUsers.length === 0) {
+            fetchUsers();
+        } else if (isOpen && allUsers.length > 0) {
+            // Optional: Background refresh if needed, but for now relying on cache/appData + one fetch is enough
+        }
+    }, [isOpen]);
+
     // Wrapper function to update both component state and localStorage simultaneously.
     const setAndCacheMessages = useCallback((updater: React.SetStateAction<ChatMessage[]>) => {
         setMessages(prevMessages => {
@@ -85,7 +115,8 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
     }, [CACHE_KEY]);
     
     const transformBackendMessage = useCallback((msg: BackendChatMessage): ChatMessage => {
-        const user = appData.users?.find((u: User) => u.UserName === msg.UserName);
+        // Use allUsers local state instead of appData to ensure we find the user
+        const user = allUsers.find((u: User) => u.UserName === msg.UserName);
         let finalContent = msg.Content;
 
         switch (msg.MessageType) {
@@ -114,7 +145,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
             type: msg.MessageType,
             fileID: msg.FileID, // Include FileID
         };
-    }, [appData.users]);
+    }, [allUsers]);
 
     const fetchHistory = useCallback(async () => {
         if (!hasFetchedHistory.current && messages.length === 0) {
@@ -380,7 +411,8 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         
         const mentionMatch = text.match(/@(\w*)$/);
         if (mentionMatch) {
-            const filteredUsers = (appData.users || []).filter((user: User) => 
+            // Use allUsers instead of appData.users
+            const filteredUsers = (allUsers || []).filter((user: User) => 
                 user.UserName.toLowerCase().includes(mentionMatch[1].toLowerCase()) &&
                 user.UserName !== currentUser?.UserName
             );
@@ -426,7 +458,8 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
         return parts.map((part, index) => {
             if (part.startsWith('@')) {
                 const username = part.substring(1);
-                const userExists = appData.users?.some((u: User) => u.UserName === username);
+                // Use allUsers for consistent lookup
+                const userExists = allUsers?.some((u: User) => u.UserName === username);
                 if (userExists) {
                     return <span key={index} className="mention-highlight">{part}</span>;
                 }
@@ -440,64 +473,82 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onClose }) => {
             {isHistoryLoading ? (
                 <div className="flex-grow flex items-center justify-center"><Spinner /></div>
             ) : (
-                messages.map(msg => (
-                    <div key={msg.id} className={`message-container ${msg.user === currentUser?.UserName ? 'current-user' : ''}`}>
-                         <div className={`message-bubble ${msg.user === currentUser?.UserName ? 'current-user' : ''}`}>
-                             <UserAvatar 
-                                avatarUrl={msg.avatar}
-                                name={msg.fullName}
-                                size="sm"
-                                onClick={() => previewImage(msg.avatar)}
-                             />
-                             <div className="flex flex-col">
-                                <div className="message-content">
-                                    {msg.user !== currentUser?.UserName && <p className="font-bold text-xs text-blue-300 mb-1">{msg.fullName}</p>}
-                                    {msg.type === 'text' && <p>{renderMessageContent(msg.content)}</p>}
-                                    {msg.type === 'image' && 
-                                        <img 
-                                            src={msg.content} 
-                                            alt="uploaded content" 
-                                            className="max-w-xs rounded-md cursor-pointer hover:opacity-80 transition-opacity" 
-                                            onClick={() => previewImage(msg.content)}
-                                        />
-                                    }
-                                    {msg.type === 'audio' && msg.content && <MemoizedAudioPlayer src={msg.content} />}
-                                </div>
-                                <span className="message-info">{new Date(msg.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit'})}</span>
-                             </div>
+                messages.map(msg => {
+                    // Logic to look up current user data from allUsers state
+                    const liveUser = allUsers.find(u => u.UserName === msg.user);
+                    // Prioritize live data from allUsers (for profile pic updates), fallback to cached message data
+                    const avatarUrl = liveUser ? liveUser.ProfilePictureURL : msg.avatar;
+                    const displayName = liveUser ? liveUser.FullName : msg.fullName;
+
+                    return (
+                        <div key={msg.id} className={`message-container ${msg.user === currentUser?.UserName ? 'current-user' : ''}`}>
+                             <div className={`message-bubble ${msg.user === currentUser?.UserName ? 'current-user' : ''}`}>
+                                 <UserAvatar 
+                                    avatarUrl={avatarUrl}
+                                    name={displayName}
+                                    size="sm"
+                                    onClick={() => previewImage(convertGoogleDriveUrl(avatarUrl, 'image'))}
+                                 />
+                                 <div className="flex flex-col">
+                                    <div className="message-content">
+                                        {msg.user !== currentUser?.UserName && <p className="font-bold text-xs text-blue-300 mb-1">{displayName}</p>}
+                                        {msg.type === 'text' && <p>{renderMessageContent(msg.content)}</p>}
+                                        {msg.type === 'image' && 
+                                            <img 
+                                                src={msg.content} 
+                                                alt="uploaded content" 
+                                                className="max-w-xs rounded-md cursor-pointer hover:opacity-80 transition-opacity" 
+                                                onClick={() => previewImage(msg.content)}
+                                            />
+                                        }
+                                        {msg.type === 'audio' && msg.content && <MemoizedAudioPlayer src={msg.content} />}
+                                    </div>
+                                    <span className="message-info">{new Date(msg.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit'})}</span>
+                                 </div>
+                            </div>
+                            {msg.user === currentUser?.UserName && (
+                                 <button onClick={() => handleDeleteMessage(msg.id)} className="delete-message-btn" title="លុបសារ">
+                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                       <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                     </svg>
+                                 </button>
+                            )}
                         </div>
-                        {msg.user === currentUser?.UserName && (
-                             <button onClick={() => handleDeleteMessage(msg.id)} className="delete-message-btn" title="លុបសារ">
-                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                   <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                 </svg>
-                             </button>
-                        )}
-                    </div>
-                ))
+                    );
+                })
             )}
             <div ref={messagesEndRef} />
         </div>
     );
 
-    const UserListView = () => (
-        <div className="user-list">
-            {(appData.users || []).map((user: User) => (
-                <div key={user.UserName} className="user-list-item">
-                    <UserAvatar 
-                        avatarUrl={user.ProfilePictureURL}
-                        name={user.FullName}
-                        size="md"
-                        onClick={() => previewImage(convertGoogleDriveUrl(user.ProfilePictureURL, 'image'))}
-                    />
-                    <div className="user-info">
-                        <span className="fullname">{user.FullName}</span>
-                        <span className="username">@{user.UserName}</span>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
+    const UserListView = () => {
+        if (isUsersLoading && allUsers.length === 0) {
+            return <div className="flex items-center justify-center h-full"><Spinner /></div>;
+        }
+        
+        return (
+            <div className="user-list">
+                {allUsers.length > 0 ? (
+                    allUsers.map((user: User) => (
+                        <div key={user.UserName} className="user-list-item">
+                            <UserAvatar 
+                                avatarUrl={user.ProfilePictureURL}
+                                name={user.FullName}
+                                size="md"
+                                onClick={() => previewImage(convertGoogleDriveUrl(user.ProfilePictureURL, 'image'))}
+                            />
+                            <div className="user-info">
+                                <span className="fullname">{user.FullName}</span>
+                                <span className="username">@{user.UserName}</span>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="text-center text-gray-500 p-4">No users found.</div>
+                )}
+            </div>
+        );
+    };
 
 
     return (
