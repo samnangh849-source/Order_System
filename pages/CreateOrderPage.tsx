@@ -1,6 +1,6 @@
 
 import React, { useState, useContext, useEffect, useMemo, useRef, useCallback } from 'react';
-import { AppContext } from '../App';
+import { AppContext } from '../context/AppContext';
 import { Product as ProductType, MasterProduct, ShippingMethod, Driver, BankAccount } from '../types';
 import Spinner from '../components/common/Spinner';
 import { WEB_APP_URL } from '../constants';
@@ -419,6 +419,13 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
         if (!appData.pages) return [];
         return appData.pages.filter((p: any) => p.Team === team);
     }, [appData.pages, team]);
+
+    // Compute the selected page logo
+    const selectedPageLogo = useMemo(() => {
+        if (!order.page) return '';
+        const pageData = teamPages.find((p: any) => p.PageName === order.page);
+        return pageData ? convertGoogleDriveUrl(pageData.PageLogoURL) : '';
+    }, [order.page, teamPages]);
 
     useEffect(() => {
         // Auto-select page if there's only one for the team
@@ -985,10 +992,19 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                     <fieldset className="border border-gray-600 p-4 rounded-lg animate-fade-in">
                         <legend className="px-2 text-lg font-semibold text-blue-300">ព័ត៌មានអតិថិជន & Page</legend>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <select name="page" value={order.page} className="form-select" onChange={handlePageChange} required>
-                                <option value="">-- ជ្រើសរើស Page* --</option>
-                                {teamPages.map((p: any) => <option key={p.PageName} value={p.PageName}>{p.PageName}</option>)}
-                            </select>
+                            <div className="relative">
+                                <select name="page" value={order.page} className="form-select pr-16" onChange={handlePageChange} required>
+                                    <option value="">-- ជ្រើសរើស Page* --</option>
+                                    {teamPages.map((p: any) => <option key={p.PageName} value={p.PageName}>{p.PageName}</option>)}
+                                </select>
+                                {selectedPageLogo && (
+                                    <img 
+                                        src={selectedPageLogo} 
+                                        alt="Page Logo" 
+                                        className="absolute right-10 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full object-cover border border-gray-600 bg-gray-700 pointer-events-none"
+                                    />
+                                )}
+                            </div>
                             <div></div>
                             <input type="text" name="name" value={order.customer.name} placeholder="ឈ្មោះអតិថិជន*" className="form-input" onChange={handleCustomerChange} required />
                             <div className="relative">
@@ -1028,7 +1044,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
 
                              <div className="md:col-span-2">
                                 <label htmlFor="additionalLocation" className="block text-sm font-medium text-gray-400 mb-2">
-                                    ទីតាំងលម្អិត (ផ្ទះលេខ, ផ្លូវ) 
+                                    ទីតាំងលម្អិត (ផ្ទះលេខ, ផ្លូវ) ឬ Link Google Map
                                 </label>
                                 <div className="flex items-center space-x-2">
                                     <input
@@ -1036,7 +1052,7 @@ const CreateOrderPage: React.FC<CreateOrderPageProps> = ({ team, onSaveSuccess, 
                                         id="additionalLocation"
                                         name="additionalLocation"
                                         value={order.customer.additionalLocation}
-                                        placeholder="បញ្ចូលទីតាំងលម្អិតនៅទីនេះ"
+                                        placeholder="បិទភ្ជាប់ Link Map ឬបញ្ចូលទីតាំងលម្អិតនៅទីនេះ"
                                         className="form-input w-full"
                                         onChange={handleCustomerChange}
                                     />

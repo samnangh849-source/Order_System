@@ -1,3 +1,4 @@
+
 /**
  * Converts a Blob (like a File) into a Base64 encoded string, without the data URI prefix.
  * @param file The Blob or File to convert.
@@ -46,7 +47,7 @@ export const convertGoogleDriveUrl = (url?: string, type: 'image' | 'audio' = 'i
     }
 
     // If it's already a direct Google content URL, return it
-    if (url.includes('lh3.googleusercontent.com') || url.includes('uc?export=media')) {
+    if (url.includes('lh3.googleusercontent.com') || url.includes('uc?export=')) {
         return url;
     }
 
@@ -58,7 +59,7 @@ export const convertGoogleDriveUrl = (url?: string, type: 'image' | 'audio' = 'i
             const fileId = match[1];
             return type === 'image'
                 ? `https://lh3.googleusercontent.com/d/${fileId}`
-                : `https://drive.google.com/uc?export=media&id=${fileId}`;
+                : `https://drive.google.com/uc?export=download&id=${fileId}`;
         }
         
         // It's a GDrive link but we couldn't parse it. Return fallback immediately.
@@ -88,9 +89,15 @@ export const imageUrlToBase64 = async (url: string): Promise<string> => {
         const processedUrl = convertGoogleDriveUrl(url);
         if (!processedUrl || processedUrl.includes('placehold.co')) return '';
 
-        // Note: This relies on the server supporting CORS.
-        // Google Drive lh3 links usually support CORS.
-        const response = await fetch(processedUrl, { mode: 'cors' });
+        // Try standard CORS fetch first
+        let response;
+        try {
+            response = await fetch(processedUrl, { mode: 'cors' });
+        } catch (e) {
+            // Some CDNs might block requests with cookies/creds
+            response = await fetch(processedUrl, { mode: 'cors', credentials: 'omit' });
+        }
+
         if (!response.ok) throw new Error('Network response was not ok');
         
         const blob = await response.blob();

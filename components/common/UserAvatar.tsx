@@ -58,6 +58,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ avatarUrl, name, size, classNam
                 className={`${dimClasses} ${baseClasses} ${className}`}
                 onError={() => setImgError(true)}
                 onClick={onClick}
+                referrerPolicy="no-referrer"
             />
         );
     }

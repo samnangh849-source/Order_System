@@ -8,6 +8,7 @@ import Spinner from './components/common/Spinner';
 import Modal from './components/common/Modal';
 import DataErrorModal from './components/common/DataErrorModal';
 import { AppContext, AppContextType } from './context/AppContext';
+import BackgroundMusic from './components/common/BackgroundMusic';
 
 // Lazy load pages and complex components to prevent circular dependency issues
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
@@ -91,7 +92,11 @@ const App: React.FC = () => {
         const normalized: any = {};
         Object.keys(data).forEach(key => {
             // Convert TitleCase keys (often from Go backend) to camelCase
-            const camelKey = key.charAt(0).toLowerCase() + key.slice(1);
+            let camelKey = key.charAt(0).toLowerCase() + key.slice(1);
+            
+            // Explicit mapping for known backend irregularities
+            if (key === 'TeamsPages') camelKey = 'pages';
+            
             normalized[camelKey] = data[key];
         });
 
@@ -295,6 +300,10 @@ const App: React.FC = () => {
                             <div className={`pt-16 ${originalAdminUser ? 'mt-10' : ''}`}>
                                 {renderContent()}
                             </div>
+                            
+                            {/* Global Background Music Player */}
+                            <BackgroundMusic />
+
                             {isChatVisible && (
                                 <button 
                                     className={`fixed right-6 p-4 bg-blue-600 text-white rounded-full shadow-lg z-[60] hover:bg-blue-700 transition-all duration-300 ${appState === 'admin_dashboard' ? 'bottom-24 md:bottom-6' : 'bottom-6'}`}

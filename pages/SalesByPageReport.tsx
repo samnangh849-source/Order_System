@@ -129,7 +129,7 @@ const SalesByPageReport: React.FC<SalesByPageReportProps> = ({ orders, onBack })
     const { appData } = useContext(AppContext);
     const [dateRange, setDateRange] = useState<DateRangePreset>('this_year');
     const [showBorders, setShowBorders] = useState(true);
-    const [isFrozen, setIsFrozen] = useState(true);
+    const [isFrozen, setIsFrozen] = useState(false);
     
     // New States for Color Management
     const [showTeamColors, setShowTeamColors] = useState(false); // Default to FALSE
@@ -206,8 +206,9 @@ const SalesByPageReport: React.FC<SalesByPageReportProps> = ({ orders, onBack })
             const teamName = order.Team || 'Unassigned';
 
             if (!stats[pageName]) {
-                // Find logo from AppData
-                const pageInfo = appData.pages?.find(p => p.PageName === pageName);
+                // Find logo from AppData using strict trim and lowercase comparison to match sloppy inputs
+                const normalizedPageName = pageName.trim().toLowerCase();
+                const pageInfo = appData.pages?.find(p => p.PageName?.trim().toLowerCase() === normalizedPageName);
                 const logoUrl = pageInfo?.PageLogoURL || '';
 
                 stats[pageName] = { 

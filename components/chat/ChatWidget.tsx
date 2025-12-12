@@ -1,6 +1,6 @@
 
 import React, { useState, useContext, useRef, useEffect, useCallback, useMemo } from 'react';
-import { AppContext } from '../../App';
+import { AppContext } from '../../context/AppContext';
 import { ChatMessage, User, BackendChatMessage } from '../../types';
 import Spinner from '../common/Spinner';
 import { useAudioRecorder } from '../../hooks/useAudioRecorder';

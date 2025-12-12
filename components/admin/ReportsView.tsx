@@ -7,6 +7,7 @@ import GeminiButton from '../common/GeminiButton';
 import Spinner from '../common/Spinner';
 import SimpleBarChart from './SimpleBarChart';
 import SimpleLineChart from '../common/SimpleLineChart';
+import { convertGoogleDriveUrl } from '../../utils/fileUtils';
 
 interface ReportsViewProps {
     orders: ParsedOrder[];
@@ -53,12 +54,12 @@ const ColumnToggler = ({ columns, visibleColumns, onToggle }: { columns: { key: 
     );
 }
 
-const DataTable = ({ title, data, columns, visibleColumns, onColumnToggle }: { title: string, data: any[], columns: { key: string, label: string, render?: (value: any, row: any, index: number) => React.ReactNode }[], visibleColumns: Set<string>, onColumnToggle: (key: string) => void }) => {
+const DataTable = ({ title, data, columns, visibleColumns, onColumnToggle, autoHeight = false }: { title: string, data: any[], columns: { key: string, label: string, render?: (value: any, row: any, index: number) => React.ReactNode }[], visibleColumns: Set<string>, onColumnToggle: (key: string) => void, autoHeight?: boolean }) => {
     const activeColumns = useMemo(() => columns.filter(c => visibleColumns.has(c.key)), [columns, visibleColumns]);
     const [showBorders, setShowBorders] = useState(true);
 
     return (
-        <div className="flex flex-col h-full bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+        <div className={`flex flex-col ${autoHeight ? '' : 'h-full'} bg-gray-800/50 rounded-lg border border-gray-700 ${autoHeight ? '' : 'overflow-hidden'}`}>
             <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                 <h3 className="text-lg font-bold text-white">{title}</h3>
                 <div className="flex items-center space-x-2">
@@ -74,7 +75,7 @@ const DataTable = ({ title, data, columns, visibleColumns, onColumnToggle }: { t
                     <ColumnToggler columns={columns} visibleColumns={visibleColumns} onToggle={onColumnToggle} />
                 </div>
             </div>
-            <div className="overflow-auto flex-grow">
+            <div className={`${autoHeight ? '' : 'overflow-auto flex-grow'}`}>
                  <table className={`report-table w-full border-collapse ${showBorders ? 'border border-gray-600' : ''}`}>
                     <thead className="bg-gray-800 sticky top-0 z-10">
                         <tr>
@@ -108,13 +109,13 @@ const DataTable = ({ title, data, columns, visibleColumns, onColumnToggle }: { t
 };
 
 const ReportsView: React.FC<ReportsViewProps> = ({ orders, reportType, allOrders }) => {
-    const { geminiAi } = useContext(AppContext);
+    const { geminiAi, appData } = useContext(AppContext);
     const [analysis, setAnalysis] = useState<string>('');
     const [loadingAnalysis, setLoadingAnalysis] = useState(false);
     
     // Column State Management for different tables
     const [profitColumns, setProfitColumns] = useState(new Set(['name', 'quantity', 'revenue', 'cost', 'profit', 'margin']));
-    const [shippingColumns, setShippingColumns] = useState(new Set(['method', 'count', 'cost']));
+    const [shippingColumns, setShippingColumns] = useState(new Set(['logo', 'method', 'count', 'cost']));
 
     // Clear analysis when data changes
     useEffect(() => {
@@ -134,11 +135,20 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders, reportType, allOrders
     }, [orders]);
 
     const profitabilityData = useMemo(() => {
-        const products: Record<string, { name: string, quantity: number, revenue: number, cost: number }> = {};
+        const products: Record<string, { name: string, quantity: number, revenue: number, cost: number, imageUrl: string }> = {};
         orders.forEach(order => {
             order.Products?.forEach(p => {
                 if (!p.name) return;
-                if (!products[p.name]) products[p.name] = { name: p.name, quantity: 0, revenue: 0, cost: 0 };
+                if (!products[p.name]) {
+                    const masterProduct = appData.products?.find(mp => mp.ProductName === p.name);
+                    products[p.name] = { 
+                        name: p.name, 
+                        quantity: 0, 
+                        revenue: 0, 
+                        cost: 0, 
+                        imageUrl: masterProduct?.ImageURL || '' 
+                    };
+                }
                 products[p.name].quantity += (Number(p.quantity) || 0);
                 products[p.name].revenue += (Number(p.total) || 0); // Using calculated total from product
                 // Product cost calculation: cost * quantity
@@ -151,7 +161,7 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders, reportType, allOrders
             profit: p.revenue - p.cost,
             margin: p.revenue > 0 ? ((p.revenue - p.cost) / p.revenue) * 100 : 0
         })).sort((a, b) => b.profit - a.profit);
-    }, [orders]);
+    }, [orders, appData.products]);
 
     const shippingData = useMemo(() => {
         const methods: Record<string, { method: string, count: number, cost: number }> = {};
@@ -173,11 +183,24 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders, reportType, allOrders
             }
         });
 
+        // Enrich with logos from AppData
+        const enrichedMethods = Object.values(methods)
+            .filter(m => m.method !== 'Unspecified') // Filter out Unspecified
+            .map(m => {
+                const info = appData.shippingMethods?.find(sm => sm.MethodName === m.method);
+                return { ...m, logo: info?.LogosURL };
+            }).sort((a, b) => b.count - a.count);
+
+        const enrichedDrivers = Object.values(drivers).map(d => {
+            const info = appData.drivers?.find(dr => dr.DriverName === d.driver);
+            return { ...d, logo: info?.ImageURL };
+        }).sort((a, b) => b.count - a.count);
+
         return {
-            byMethod: Object.values(methods).sort((a, b) => b.count - a.count),
-            byDriver: Object.values(drivers).sort((a, b) => b.count - a.count)
+            byMethod: enrichedMethods,
+            byDriver: enrichedDrivers
         };
-    }, [orders]);
+    }, [orders, appData.shippingMethods, appData.drivers]);
 
     const forecastingData = useMemo(() => {
         // Use allOrders to get better historical trend, filter last 30 days
@@ -245,17 +268,22 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders, reportType, allOrders
                 </div>
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-96">
-                <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700 flex flex-col items-center justify-center">
+            {/* Chart and AI Analysis Stacked */}
+            <div className="space-y-6">
+                <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700 flex flex-col items-center justify-center min-h-[400px]">
                      <SimpleBarChart 
-                        title="Top 5 Products by Revenue" 
-                        data={profitabilityData.slice(0, 5).map(p => ({ label: p.name.substring(0, 15) + '...', value: p.revenue }))} 
+                        title="ផលិតផលទាំង ៥ ដែលមានចំណូលខ្ពស់បំផុត" 
+                        data={profitabilityData.slice(0, 5).map(p => ({ 
+                            label: p.name.substring(0, 15) + (p.name.length > 15 ? '...' : ''), 
+                            value: p.revenue,
+                            imageUrl: p.imageUrl
+                        }))} 
                     />
                 </div>
                 <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
                      <h3 className="text-lg font-bold text-white mb-4">AI Analysis</h3>
                      {!analysis ? (
-                         <div className="h-full flex flex-col items-center justify-center text-center">
+                         <div className="h-full flex flex-col items-center justify-center text-center p-6">
                              <p className="text-gray-400 mb-4">Click below to generate insights about this data.</p>
                              <GeminiButton onClick={handleAnalyze} isLoading={loadingAnalysis}>Analyze Overview</GeminiButton>
                          </div>
@@ -298,27 +326,48 @@ const ReportsView: React.FC<ReportsViewProps> = ({ orders, reportType, allOrders
 
     const renderShipping = () => {
         const methodCols = [
+            { key: 'logo', label: 'Logo', render: (val: string) => <img src={convertGoogleDriveUrl(val)} className="w-8 h-8 rounded-full object-cover border border-gray-600 bg-gray-700" alt="logo"/> },
             { key: 'method', label: 'Method' },
             { key: 'count', label: 'Orders' },
             { key: 'cost', label: 'Total Cost ($)', render: (val: number) => `$${val.toFixed(2)}` }
         ];
         
+        const driverCols = [
+            { key: 'logo', label: 'Photo', render: (val: string) => <img src={convertGoogleDriveUrl(val)} className="w-8 h-8 rounded-full object-cover border border-gray-600 bg-gray-700" alt="driver"/> },
+            { key: 'method', label: 'Driver' }, 
+            { key: 'count', label: 'Deliveries' }, 
+            { key: 'cost', label: 'Total Paid ($)', render: (val: number) => `$${val.toFixed(2)}` }
+        ];
+
         return (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[500px]">
-                <DataTable 
-                    title="Cost by Shipping Service" 
-                    data={shippingData.byMethod} 
-                    columns={methodCols}
-                    visibleColumns={new Set(['method', 'count', 'cost'])}
-                    onColumnToggle={() => {}}
-                />
-                <DataTable 
-                    title="Cost by Driver" 
-                    data={shippingData.byDriver.map(d => ({...d, method: d.driver}))} // Map driver to method key for reuse
-                    columns={[{ key: 'method', label: 'Driver' }, { key: 'count', label: 'Deliveries' }, { key: 'cost', label: 'Total Paid ($)', render: (val: number) => `$${val.toFixed(2)}` }]}
-                    visibleColumns={new Set(['method', 'count', 'cost'])}
-                    onColumnToggle={() => {}}
-                />
+            <div className="flex flex-col space-y-6">
+                <div className="h-[400px]">
+                    <DataTable 
+                        title="Cost by Shipping Service" 
+                        data={shippingData.byMethod} 
+                        columns={methodCols}
+                        visibleColumns={shippingColumns}
+                        onColumnToggle={(key) => {
+                             const newSet = new Set(shippingColumns);
+                             if (newSet.has(key)) newSet.delete(key); else newSet.add(key);
+                             setShippingColumns(newSet);
+                        }}
+                    />
+                </div>
+                <div>
+                    <DataTable 
+                        title="Cost by Driver" 
+                        data={shippingData.byDriver.map(d => ({...d, method: d.driver}))} // Map driver to method key for reuse
+                        columns={driverCols}
+                        visibleColumns={shippingColumns}
+                        onColumnToggle={(key) => {
+                             const newSet = new Set(shippingColumns);
+                             if (newSet.has(key)) newSet.delete(key); else newSet.add(key);
+                             setShippingColumns(newSet);
+                        }}
+                        autoHeight={true}
+                    />
+                </div>
             </div>
         );
     };

@@ -7,11 +7,14 @@ import Spinner from '../components/common/Spinner';
 import OrdersList from '../components/orders/OrdersList';
 import CreateOrderPage from './CreateOrderPage';
 
+type DateRangePreset = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'all';
+
 const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
     const [orders, setOrders] = useState<ParsedOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [dateRange, setDateRange] = useState<DateRangePreset>('today'); // Default to Today
 
     useEffect(() => {
         const fetchOrders = async () => {
@@ -73,44 +76,111 @@ const UserOrdersView: React.FC<{ team: string }> = ({ team }) => {
     }, [team]);
     
     const filteredOrders = useMemo(() => {
-        if (!searchQuery.trim()) return orders;
+        let filtered = orders;
+
+        // 1. Date Filtering
+        const now = new Date();
+        let startDate: Date | null = null;
+        let endDate: Date | null = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+        switch (dateRange) {
+            case 'today':
+                startDate = todayStart;
+                endDate = todayEnd;
+                break;
+            case 'yesterday':
+                startDate = new Date(todayStart);
+                startDate.setDate(todayStart.getDate() - 1);
+                endDate = new Date(todayEnd);
+                endDate.setDate(todayEnd.getDate() - 1);
+                break;
+            case 'this_week':
+                const day = now.getDay();
+                startDate = new Date(todayStart);
+                startDate.setDate(todayStart.getDate() - day + (day === 0 ? -6 : 1)); // Adjust for Sunday start if needed, assumes Monday start logic approx
+                break;
+            case 'this_month':
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                break;
+            case 'all':
+                startDate = null;
+                endDate = null;
+                break;
+        }
+
+        if (startDate || endDate) {
+            filtered = filtered.filter(order => {
+                if (!order.Timestamp) return false;
+                const orderDate = new Date(order.Timestamp);
+                return (!startDate || orderDate >= startDate) && (!endDate || orderDate <= endDate);
+            });
+        }
+
+        // 2. Search Filtering
+        if (!searchQuery.trim()) return filtered;
+        
         const lowerQuery = searchQuery.toLowerCase().trim();
-        return orders.filter(o => 
+        return filtered.filter(o => 
             (o['Order ID'] || '').toLowerCase().includes(lowerQuery) ||
             (o['Customer Name'] || '').toLowerCase().includes(lowerQuery) ||
             (o['Customer Phone'] || '').includes(lowerQuery) ||
             (o.User && o.User.toLowerCase().includes(lowerQuery)) ||
             (o.Products && Array.isArray(o.Products) && o.Products.some(p => (p.name || '').toLowerCase().includes(lowerQuery)))
         );
-    }, [orders, searchQuery]);
+    }, [orders, searchQuery, dateRange]);
 
     if (loading) return <div className="flex justify-center items-center h-64"><Spinner size="lg"/></div>;
     if (error) return <p className="text-center text-red-400 p-8">{error}</p>;
 
-    if (orders.length === 0 && !loading) {
-        return (
-            <div className="text-center p-8 page-card">
-                <h3 className="text-xl font-semibold text-white">មិនមានប្រតិបត្តិការណ៍</h3>
-                <p className="text-gray-400 mt-2">រកមិនឃើញការកម្មង់សម្រាប់ក្រុម {team} ទេ។</p>
-            </div>
-        )
-    }
-
     return (
         <div className="space-y-4">
-            <div className="relative max-w-md">
-                <input
-                    type="text"
-                    placeholder="ស្វែងរក (Order ID, ឈ្មោះ, លេខទូរស័ព្ទ)..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="form-input !pl-10"
-                />
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                <div className="relative w-full sm:max-w-xs">
+                    <input
+                        type="text"
+                        placeholder="ស្វែងរក (Order ID, ឈ្មោះ, លេខទូរស័ព្ទ)..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="form-input !pl-10 w-full"
+                    />
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <label className="text-sm text-gray-400 whitespace-nowrap">បង្ហាញ៖</label>
+                    <select 
+                        value={dateRange} 
+                        onChange={(e) => setDateRange(e.target.value as DateRangePreset)}
+                        className="form-select text-sm py-2"
+                    >
+                        <option value="today">ថ្ងៃនេះ (Today)</option>
+                        <option value="yesterday">ម្សិលមិញ (Yesterday)</option>
+                        <option value="this_week">សប្តាហ៍នេះ (This Week)</option>
+                        <option value="this_month">ខែនេះ (This Month)</option>
+                        <option value="all">ទាំងអស់ (All Time)</option>
+                    </select>
+                </div>
             </div>
-            <OrdersList orders={filteredOrders} showActions={false} />
+
+            {filteredOrders.length === 0 ? (
+                <div className="text-center p-8 page-card">
+                    <h3 className="text-xl font-semibold text-white">មិនមានប្រតិបត្តិការណ៍</h3>
+                    <p className="text-gray-400 mt-2">
+                        រកមិនឃើញការកម្មង់សម្រាប់ <span className="text-blue-400 font-bold">
+                            {dateRange === 'today' ? 'ថ្ងៃនេះ' : 
+                             dateRange === 'yesterday' ? 'ម្សិលមិញ' :
+                             dateRange === 'this_week' ? 'សប្តាហ៍នេះ' :
+                             dateRange === 'this_month' ? 'ខែនេះ' : 'ទាំងអស់'}
+                        </span> ទេ។
+                    </p>
+                </div>
+            ) : (
+                <OrdersList orders={filteredOrders} showActions={false} />
+            )}
         </div>
     );
 };

@@ -376,7 +376,12 @@ const ConfigEditModal = ({ section, item, onClose, onSave }: { section: ConfigSe
                                     </button>
                                 </div>
                                 {formData[field.name] && (
-                                    <img src={convertGoogleDriveUrl(formData[field.name])} alt="Preview" className="mt-2 h-20 w-auto rounded object-contain bg-gray-700 p-1" />
+                                    <img 
+                                        src={convertGoogleDriveUrl(formData[field.name])} 
+                                        alt="Preview" 
+                                        className="mt-2 h-20 w-auto rounded object-contain bg-gray-700 p-1"
+                                        referrerPolicy="no-referrer" 
+                                    />
                                 )}
                             </div>
                         ) : field.type === 'password' ? (
@@ -550,7 +555,12 @@ const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ onBack, initialSe
         if (value === null || value === undefined) return '';
         
         if (field.type === 'image_url' && value) {
-            return <img src={convertGoogleDriveUrl(String(value))} alt="preview" className="h-10 w-auto object-contain rounded bg-gray-700" />;
+            return <img 
+                src={convertGoogleDriveUrl(String(value))} 
+                alt="preview" 
+                className="h-10 w-auto object-contain rounded bg-gray-700" 
+                referrerPolicy="no-referrer"
+            />;
         }
         if (typeof value === 'boolean') {
             return value ? '✔️' : '❌';
@@ -783,6 +793,5 @@ const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ onBack, initialSe
         </div>
     ); 
 };
-
 
 export default SettingsDashboard;

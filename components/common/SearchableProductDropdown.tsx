@@ -406,7 +406,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                                     className={`p-3 text-sm rounded-md cursor-pointer flex items-center gap-3 ${activeIndex === index ? 'bg-blue-600' : 'hover:bg-blue-600/70'}`}
                                     onMouseDown={() => handleItemClick(product)}
                                 >
-                                    <img src={convertGoogleDriveUrl(product.ImageURL)} alt={product.ProductName} className="w-10 h-10 object-cover rounded flex-shrink-0" />
+                                    <img src={convertGoogleDriveUrl(product.ImageURL)} alt={product.ProductName} className="w-10 h-10 object-cover rounded flex-shrink-0" referrerPolicy="no-referrer" />
                                     <div className="flex-grow overflow-hidden">
                                         <p className="font-semibold truncate">{highlightMatch(product.ProductName, searchTerm)}</p>
                                         <p className="text-xs text-gray-400 truncate">
@@ -435,6 +435,7 @@ const SearchableProductDropdown: React.FC<SearchableProductDropdownProps> = ({ p
                                 src={convertGoogleDriveUrl(previewProduct.ImageURL)} 
                                 alt={previewProduct.ProductName}
                                 className="w-32 h-32 object-cover rounded-lg border-2 border-gray-600 shadow-lg bg-gray-700"
+                                referrerPolicy="no-referrer"
                             />
                         </div>
 

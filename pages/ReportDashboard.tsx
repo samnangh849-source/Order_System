@@ -4,23 +4,27 @@ import { AppContext } from '../context/AppContext';
 import { ParsedOrder, ShippingMethod, Driver, MasterProduct, BankAccount, User } from '../types';
 import ReportsView from '../components/admin/ReportsView';
 import Spinner from '../components/common/Spinner';
-import Modal from '../components/common/Modal'; // NEW: Import Modal for desktop
+import Modal from '../components/common/Modal';
 import { WEB_APP_URL } from '../constants';
+import SalesByTeamPage from './SalesByTeamPage';
+import SalesByPageReport from './SalesByPageReport';
 
 interface ReportDashboardProps {
-    initialReportType: 'overview' | 'performance' | 'profitability' | 'forecasting' | 'shipping';
+    initialReportType: 'overview' | 'performance' | 'profitability' | 'forecasting' | 'shipping' | 'sales_team' | 'sales_page';
     onBack: () => void;
 }
 
-type ReportType = 'overview' | 'performance' | 'profitability' | 'forecasting' | 'shipping';
+type ReportType = 'overview' | 'performance' | 'profitability' | 'forecasting' | 'shipping' | 'sales_team' | 'sales_page';
 type DateRangePreset = 'all' | 'today' | 'last_day' | 'this_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'week1' | 'week2' | 'week3' | 'week4' | 'custom';
 
 const reportSections: {id: ReportType, title: string, icon: React.ReactElement}[] = [
-    { id: 'overview', title: 'ទិដ្ឋភាពទូទៅ', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg> },
-    { id: 'performance', title: 'ការអនុវត្ត', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 7L21 7" /><path strokeLinecap="round" strokeLinejoin="round" d="M13 17L21 17" /><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L18 12" /><path strokeLinecap="round" strokeLinejoin="round" d="M3 21L21 3" /></svg> },
-    { id: 'profitability', title: 'ប្រាក់ចំណេញ', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg> },
-    { id: 'forecasting', title: 'ការព្យាករណ៍', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> },
-    { id: 'shipping', title: 'ចំណាយដឹកជញ្ជូន', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10l2 2h8a1 1 0 001-1z" /><path strokeLinecap="round" strokeLinejoin="round" d="M18 18h1a1 1 0 001-1v-3.354a1.5 1.5 0 00-.9-1.342l-3.286-1.643A1 1 0 0016 11.236V16" /></svg> },
+    { id: 'overview', title: 'ទិដ្ឋភាពទូទៅ', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg> },
+    { id: 'sales_team', title: 'Sales Team Report', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg> },
+    { id: 'sales_page', title: 'Sales Page Report', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
+    { id: 'performance', title: 'ការអនុវត្ត', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7L21 7" /><path strokeLinecap="round" strokeLinejoin="round" d="M13 17L21 17" /><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L18 12" /><path strokeLinecap="round" strokeLinejoin="round" d="M3 21L21 3" /></svg> },
+    { id: 'profitability', title: 'ប្រាក់ចំណេញ', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg> },
+    { id: 'forecasting', title: 'ការព្យាករណ៍', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> },
+    { id: 'shipping', title: 'ចំណាយដឹកជញ្ជូន', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10l2 2h8a1 1 0 001-1z" /><path strokeLinecap="round" strokeLinejoin="round" d="M18 18h1a1 1 0 001-1v-3.354a1.5 1.5 0 00-.9-1.342l-3.286-1.643A1 1 0 0016 11.236V16" /></svg> },
 ];
 
 const datePresets: { label: string, value: DateRangePreset }[] = [
@@ -250,6 +254,16 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
         if (ordersError) {
             return <p className="text-center text-red-400 p-8 whitespace-pre-wrap">{ordersError}</p>;
         }
+
+        // --- SPECIAL FULL SCREEN REPORTS ---
+        if (activeReport === 'sales_team') {
+            return <SalesByTeamPage orders={orders} onBack={() => setActiveReport('overview')} />;
+        }
+        if (activeReport === 'sales_page') {
+            return <SalesByPageReport orders={orders} onBack={() => setActiveReport('overview')} />;
+        }
+
+        // Default reports view for other types
         return <ReportsView orders={filteredOrders} reportType={activeReport} allOrders={orders} />;
     };
 
@@ -338,6 +352,17 @@ const ReportDashboard: React.FC<ReportDashboardProps> = ({
             </div>
         </div>
     );
+
+    // --- FULL SCREEN RENDER LOGIC ---
+    // If specific "Full Screen" reports are active, we skip the standard Sidebar/Layout structure.
+    if (activeReport === 'sales_team' || activeReport === 'sales_page') {
+        return (
+            <div className="w-full h-full min-h-[calc(100vh-6rem)] animate-fade-in">
+                 <style>{`.animate-fade-in { animation: fadeIn 0.5s ease-in-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+                {renderContent()}
+            </div>
+        );
+    }
 
     return (
         <div className="w-full h-full min-h-[calc(100vh-6rem)] max-w-7xl mx-auto p-2 sm:p-4 lg:p-6 animate-fade-in">

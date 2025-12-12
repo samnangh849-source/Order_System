@@ -7,15 +7,13 @@ import PerformanceTrackingPage from './PerformanceTrackingPage';
 import ReportDashboard from './ReportDashboard';
 import SettingsDashboard from './SettingsDashboard';
 import OrdersDashboard from './OrdersDashboard';
-import SalesByTeamPage from './SalesByTeamPage';
-import SalesByPageReport from './SalesByPageReport'; // Import the new page
 import { useUrlState } from '../hooks/useUrlState';
 import { WEB_APP_URL } from '../constants';
 import { FullOrder, ParsedOrder } from '../types';
 
 
 type AdminView = 'dashboard' | 'performance';
-type ActiveDashboard = 'admin' | 'orders' | 'reports' | 'settings' | 'sales_team' | 'sales_page'; // Added sales_page
+type ActiveDashboard = 'admin' | 'orders' | 'reports' | 'settings';
 
 const AdminDashboard: React.FC = () => {
     const { appData, currentUser } = useContext(AppContext);
@@ -56,7 +54,7 @@ const AdminDashboard: React.FC = () => {
                     if (result.status === 'success') {
                         const rawOrders: FullOrder[] = Array.isArray(result.data) ? result.data.filter((o: any) => o !== null) : [];
                         
-                        // Parse orders immediately for use in sub-pages like SalesByTeamPage
+                        // Parse orders immediately for use in sub-pages
                         const parsed = rawOrders.map(o => {
                             let products = [];
                             try {
@@ -93,8 +91,8 @@ const AdminDashboard: React.FC = () => {
             }
         };
 
-        // Fetch if on dashboard OR if we switched to a tab that needs orders (like sales_team) but haven't fetched yet
-        if (activeDashboard === 'admin' || ((activeDashboard === 'sales_team' || activeDashboard === 'sales_page') && parsedOrders.length === 0)) {
+        // Fetch if on dashboard
+        if (activeDashboard === 'admin') {
             fetchOrders();
         }
     }, [activeDashboard]); // Depend on activeDashboard to trigger fetch if needed
@@ -186,8 +184,6 @@ const AdminDashboard: React.FC = () => {
     
      const navConfig = {
         dashboard: { label: 'ទិន្នន័យសង្ខេប', icon: viewConfig.dashboard.icon, component: 'admin' },
-        sales_team: { label: 'Sales Team', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, component: 'sales_team' },
-        sales_page: { label: 'Sales Page', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>, component: 'sales_page' }, // Added
         orders: { label: 'ប្រតិបត្តិការណ៍', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002 2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>, component: 'orders' },
         reports: { 
             label: 'របាយការណ៍', 
@@ -397,8 +393,6 @@ const AdminDashboard: React.FC = () => {
 
         const sidebarNavItems = [
             { id: 'dashboard', label: 'ទិន្នន័យសង្ខេប', icon: viewConfig.dashboard.icon, component: 'admin' },
-            { id: 'sales_team', label: 'Sales Team Report', icon: navConfig.sales_team.icon, component: 'sales_team' },
-            { id: 'sales_page', label: 'Sales Page Report', icon: navConfig.sales_page.icon, component: 'sales_page' }, // Added to sidebar
             { id: 'orders', label: 'ប្រតិបត្តិការណ៍', icon: navConfig.orders.icon, component: 'orders' },
             { id: 'reports', label: 'របាយការណ៍', icon: navConfig.reports.icon, component: 'reports' },
             { id: 'performance', label: 'សមិទ្ធផល', icon: viewConfig.performance.icon, component: 'admin' },
@@ -430,8 +424,7 @@ const AdminDashboard: React.FC = () => {
                 <main className="flex-1 p-2 sm:p-4 lg:p-6 overflow-y-auto pb-20 md:pb-6">
                      <div className="flex justify-between items-center mb-6 md:hidden">
                         <h1 className="text-2xl font-bold text-white">
-                            {viewConfig[currentAdminView] ? viewConfig[currentAdminView].label : 
-                             activeDashboard === 'sales_page' ? 'Sales Page Report' : 'Sales Team Report'}
+                            {viewConfig[currentAdminView] ? viewConfig[currentAdminView].label : 'Admin Dashboard'}
                         </h1>
                     </div>
                     {renderAdminContent()}
@@ -449,10 +442,6 @@ const AdminDashboard: React.FC = () => {
     switch (activeDashboard) {
         case 'admin':
             return <AdminDashboardContent />;
-        case 'sales_team':
-            return <SalesByTeamPage orders={parsedOrders} onBack={handleBackToAdmin} />;
-        case 'sales_page':
-            return <SalesByPageReport orders={parsedOrders} onBack={handleBackToAdmin} />;
         case 'orders':
             return <OrdersDashboard onBack={handleBackToAdmin} />;
         case 'reports':
