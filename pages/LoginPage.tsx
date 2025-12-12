@@ -2,8 +2,9 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import Spinner from '../components/common/Spinner';
-import { WEB_APP_URL } from '../constants';
+import { WEB_APP_URL, APP_LOGO_URL } from '../constants';
 import { User } from '../types';
+import { convertGoogleDriveUrl } from '../utils/fileUtils';
 
 const LoginPage: React.FC = () => {
     const [username, setUsername] = useState('');
@@ -121,11 +122,23 @@ const LoginPage: React.FC = () => {
         <div className="min-h-screen flex items-center justify-center p-4 login-page-container bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
             <div className="w-full max-w-md bg-gray-800/60 backdrop-blur-xl border border-gray-700/50 rounded-2xl shadow-2xl p-8 transform transition-all hover:border-gray-600/50 animate-fade-in">
                 <div className="text-center mb-8">
-                    <div className="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner ring-1 ring-blue-500/30">
-                        <svg className="w-10 h-10 text-blue-400" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M19 9H15V3H9V9H5L12 16L19 9ZM5 18V20H19V18H5Z"/>
-                        </svg>
-                    </div>
+                    {APP_LOGO_URL ? (
+                        <div className="w-24 h-24 mx-auto mb-4 relative">
+                            <div className="absolute inset-0 bg-blue-500/20 rounded-full blur-xl"></div>
+                            <img 
+                                src={convertGoogleDriveUrl(APP_LOGO_URL)} 
+                                alt="App Logo" 
+                                className="w-full h-full object-contain relative z-10 drop-shadow-lg"
+                                referrerPolicy="no-referrer"
+                            />
+                        </div>
+                    ) : (
+                        <div className="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner ring-1 ring-blue-500/30">
+                            <svg className="w-10 h-10 text-blue-400" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M19 9H15V3H9V9H5L12 16L19 9ZM5 18V20H19V18H5Z"/>
+                            </svg>
+                        </div>
+                    )}
                     <h1 className="text-3xl font-bold text-white tracking-tight">កម្មវិធីទម្លាក់ការកម្មង់</h1>
                     <p className="text-gray-400 mt-2 text-sm">សូមបញ្ចូលគណនីដើម្បីបន្តការងារ</p>
                 </div>

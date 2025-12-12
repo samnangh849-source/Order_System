@@ -15,3 +15,7 @@ export const LABEL_PRINTER_URL_BASE = "https://samnangh849-source.github.io/Butt
 // អ្នកអាចដាក់ Link ពី Google Drive (Anyone with the link) ឬ Direct URL ផ្សេងទៀតនៅទីនេះ
 export const BACKGROUND_MUSIC_URL = "/music/1.mp3";
 
+// APP LOGO URL
+// សូមដាក់ Link រូបភាព Logo របស់អ្នកនៅទីនេះ (Google Drive Link ឬ Direct URL)
+// ប្រសិនបើទុកចោល (empty string) កម្មវិធីនឹងប្រើរូបតំណាងលំនាំដើម។
+export const APP_LOGO_URL = "https://cdn-icons-png.flaticon.com/512/2921/2921226.png"; 

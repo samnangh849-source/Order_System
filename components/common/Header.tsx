@@ -4,6 +4,7 @@ import { AppContext } from '../../context/AppContext';
 import EditProfileModal from './EditProfileModal';
 import { convertGoogleDriveUrl } from '../../utils/fileUtils';
 import UserAvatar from './UserAvatar';
+import { APP_LOGO_URL } from '../../constants';
 
 interface HeaderProps {
     onBackToRoleSelect: () => void;
@@ -34,7 +35,17 @@ const Header: React.FC<HeaderProps> = ({ onBackToRoleSelect }) => {
             <header className="fixed top-0 left-0 right-0 bg-gray-900/70 backdrop-blur-sm border-b border-gray-700 z-40 p-2 sm:p-3 shadow-lg"
                     style={originalAdminUser ? { top: '40px' } : {}}>
                 <div className="w-full max-w-7xl mx-auto flex justify-between items-center px-4">
-                    <h1 className="text-lg sm:text-xl font-bold text-white truncate">កម្មវិធីទម្លាក់ការកម្មង់</h1>
+                    <div className="flex items-center space-x-3">
+                        {APP_LOGO_URL && (
+                            <img 
+                                src={convertGoogleDriveUrl(APP_LOGO_URL)} 
+                                alt="Logo" 
+                                className="h-8 w-8 sm:h-10 sm:w-10 object-contain rounded-md"
+                                referrerPolicy="no-referrer"
+                            />
+                        )}
+                        <h1 className="text-lg sm:text-xl font-bold text-white truncate">កម្មវិធីទម្លាក់ការកម្មង់</h1>
+                    </div>
                     <div className="flex items-center space-x-2 sm:space-x-4">
                         <div className="text-right hidden sm:block">
                             <p className="font-semibold text-white text-sm sm:text-base truncate">{currentUser.FullName}</p>
