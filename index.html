@@ -1,56 +1,84 @@
-
 <!DOCTYPE html>
 <html lang="km">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>កម្មវិធីទម្លាក់ការកម្មង់</title>
     <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/2921/2921226.png">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    
+    <!-- Core Styling & Libraries -->
+    <script src="https://cdn.tailwindcss.com" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript" crossorigin="anonymous"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
     
-    <!-- Leaflet Map CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- MapLibre GL JS - Better performance and aesthetics for modern apps -->
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" crossorigin="anonymous" />
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" crossorigin="anonymous"></script>
     
     <script>
+      // Global and environment variable polyfills
       window.global = window;
       window.process = window.process || {
-        env: {
-          NODE_ENV: 'development',
-          API_KEY: '' 
-        },
+        env: { NODE_ENV: 'development', API_KEY: '' },
         browser: true,
         version: ''
       };
+
+      // Initialize CSS variables for flare effect
+      document.documentElement.style.setProperty('--x', '50%');
+      document.documentElement.style.setProperty('--y', '50%');
+
+      // Efficient mouse tracking for the background flare light
+      let rafId = null;
+      document.addEventListener('mousemove', (e) => {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          document.documentElement.style.setProperty('--x', e.clientX + 'px');
+          document.documentElement.style.setProperty('--y', e.clientY + 'px');
+        });
+      });
+
+      /**
+       * SANDBOX PROTECTION LAYER
+       * Fixes security/location access errors in restricted iframe environments
+       */
+      (function() {
+        try {
+          const test = window.location.href;
+        } catch (e) {
+          if (!window.location.origin) {
+            window.location.origin = window.location.protocol + "//" + window.location.hostname + (window.location.port ? ':' + window.location.port: '');
+          }
+        }
+      })();
     </script>
 
-<script type="importmap">
+
+    <script type="importmap">
 {
   "imports": {
-    "vite": "https://aistudiocdn.com/vite@^7.2.2",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
     "path": "https://aistudiocdn.com/path@^0.12.7",
     "url": "https://aistudiocdn.com/url@^0.11.4",
     "jspdf": "https://aistudiocdn.com/jspdf@^2.5.2",
     "jspdf-autotable": "https://aistudiocdn.com/jspdf-autotable@^3.8.4",
-    "leaflet": "https://unpkg.com/leaflet@1.9.4/dist/leaflet-src.esm.js",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
-  <script type="module" crossorigin src="/Order_System/assets/index-uYlMNQtT.js"></script>
-  <link rel="stylesheet" crossorigin href="/Order_System/assets/index-CFaE8Pek.css">
+  <script type="module" crossorigin src="/Order_System/assets/index-BZggw7-M.js"></script>
+  <link rel="stylesheet" crossorigin href="/Order_System/assets/index-DgdWC-h2.css">
 </head>
-<body class="bg-gray-900 text-gray-200">
+<body class="bg-gray-950 text-gray-200 antialiased overflow-x-hidden">
     <div class="flare-light"></div>
     <div id="root"></div>
 </body>
