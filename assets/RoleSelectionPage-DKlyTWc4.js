@@ -1,4 +1,4 @@
-import{j as e}from"./index-0G1BjYG6.js";const s=({onSelect:r})=>e.jsxs("div",{className:"min-h-screen flex flex-col items-center justify-center p-4 animate-fade-in bg-gradient-to-br from-gray-900 to-gray-800",children:[e.jsx("style",{children:`
+import{j as e}from"./index-n74rAIzc.js";const s=({onSelect:r})=>e.jsxs("div",{className:"min-h-screen flex flex-col items-center justify-center p-4 animate-fade-in bg-gradient-to-br from-gray-900 to-gray-800",children:[e.jsx("style",{children:`
                 @keyframes fade-in {
                     from { opacity: 0; transform: translateY(20px); }
                     to { opacity: 1; transform: translateY(0); }
