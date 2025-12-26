@@ -1,0 +1,1 @@
+const e="FeatureCollection",t=[{type:"Feature",properties:{name:"TestProvince",name_kh:"ខេត្តគំរូ"},geometry:{type:"Polygon",coordinates:[[[102.5,11],[103.5,11],[103.5,12],[102.5,12],[102.5,11]]]}}],o={type:e,features:t};export{o as default,t as features,e as type};
