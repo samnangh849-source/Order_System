@@ -1,0 +1,13 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "TestProvince", "name_kh": "ខេត្តគំរូ" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[102.5,11.0],[103.5,11.0],[103.5,12.0],[102.5,12.0],[102.5,11.0]]]
+      }
+    }
+  ]
+}
